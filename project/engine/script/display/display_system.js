@@ -14,6 +14,7 @@ import {
     resolveDisplayWebGLLayerName,
     usesNativeDisplay2DResolution
 } from './display_surface_descriptor.js';
+import { createDisplayWebGLContextAttributes } from './webgl_context_attributes.js';
 
 let displaySystemInstance = null;
 const DISPLAY_WEBGL_RENDER_MODES = getData('DISPLAY_SURFACE_DATA').WEBGL_RENDER_MODES;
@@ -322,7 +323,7 @@ export class DisplaySystem {
     #registerStaticSurface(surfaceId, domId, type, options = {}) {
         const canvas = document.getElementById(domId);
         const context = type === 'webgl'
-            ? canvas.getContext('webgl', { alpha: options.alpha !== false, preserveDrawingBuffer: false })
+            ? canvas.getContext('webgl', createDisplayWebGLContextAttributes(options.alpha !== false))
             : canvas.getContext('2d');
 
         const descriptor = createDisplaySurfaceDescriptor({

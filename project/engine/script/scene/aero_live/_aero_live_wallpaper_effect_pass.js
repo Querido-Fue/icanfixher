@@ -1140,8 +1140,6 @@ export class AeroLiveWallpaperEffectPass {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
         gl.useProgram(null);
-        const error = gl.getError();
-        if (error !== gl.NO_ERROR) this.lastGlError = error;
     }
 
     #renderResult(rendered, target, width, height) {

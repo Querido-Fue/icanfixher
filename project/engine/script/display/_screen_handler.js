@@ -4,6 +4,10 @@ import { clampNumber } from 'util/number_util.js';
 
 const GLOBAL_CONSTANTS = getData('GLOBAL_CONSTANTS');
 
+/** 고해상도·Retina 환경에서 WebGL 및 동적 surface가 넘지 않을 물리 렌더 상한입니다. */
+const MAX_RENDER_TARGET_WIDTH = 1920;
+const MAX_RENDER_TARGET_HEIGHT = 1080;
+
 /**
  * 현재 브라우저 뷰포트에 맞춰 Canvas 렌더 타깃과 16:9 UI 안전 영역을 계산합니다.
  * 창 크기와 전체화면 상태는 브라우저가 소유하며 별도로 저장하지 않습니다.
@@ -87,8 +91,13 @@ export class ScreenHandler {
         }
         const nextBaseWidth = Math.max(1, Math.floor(baseWidth));
         const nextBaseHeight = Math.max(1, Math.floor(baseHeight));
-        const nextWidth = Math.max(1, Math.floor(nextBaseWidth * renderScale));
-        const nextHeight = Math.max(1, Math.floor(nextBaseHeight * renderScale));
+        const targetLimitScale = Math.min(
+            1,
+            MAX_RENDER_TARGET_WIDTH / nextBaseWidth,
+            MAX_RENDER_TARGET_HEIGHT / nextBaseHeight
+        );
+        const nextWidth = Math.max(1, Math.floor(nextBaseWidth * targetLimitScale * renderScale));
+        const nextHeight = Math.max(1, Math.floor(nextBaseHeight * targetLimitScale * renderScale));
         const nextUiWidth = Math.floor(clampNumber(nextWidth, 1, nextHeight * ratio));
         const nextUiOffsetX = (nextWidth - nextUiWidth) / 2;
         const changed = this.baseWidth !== nextBaseWidth

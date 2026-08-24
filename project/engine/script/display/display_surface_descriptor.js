@@ -56,13 +56,15 @@ export function getDisplayStaticSurfaceOrder(surfaceId) {
 }
 
 /**
- * 렌더 스케일과 독립적으로 네이티브 해상도를 유지할 2D surface인지 반환합니다.
+ * 렌더 스케일과 독립적으로 네이티브 해상도를 유지할 정적 2D surface인지 반환합니다.
+ * 동적 2D surface는 WebGL과 같은 제한 해상도를 사용해 고DPI 장치의 backing-store 폭증을 막습니다.
  * @param {object} descriptor - 검사할 surface descriptor입니다.
  * @returns {boolean} 네이티브 2D surface 여부입니다.
  */
 export function usesNativeDisplay2DResolution(descriptor) {
     return descriptor?.type === '2d'
-        && (descriptor.dynamic === true || DISPLAY_NATIVE_2D_SURFACE_ID_SET.has(descriptor.id));
+        && descriptor.dynamic !== true
+        && DISPLAY_NATIVE_2D_SURFACE_ID_SET.has(descriptor.id);
 }
 
 /**

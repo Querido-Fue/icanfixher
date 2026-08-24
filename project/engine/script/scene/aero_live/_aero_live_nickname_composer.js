@@ -21,6 +21,7 @@ export class AeroLiveNicknameComposer {
         this.compositionActive = false;
         this.compositionSubmitSuppressed = false;
         this.compositionSuppressionGeneration = 0;
+        this.lastSyncSignature = '';
         this.#createDom();
     }
 
@@ -55,6 +56,23 @@ export class AeroLiveNicknameComposer {
         const borderPixels = Math.max(1, viewportHeight * 0.0022);
         const cssPixel = (renderPixels) => `${Math.max(0, renderPixels / scaleRatio)}px`;
         const nextVisible = state.visible === true;
+        const syncSignature = JSON.stringify([
+            nextVisible,
+            state.invalid === true,
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            scaleRatio,
+            hostOffsetX,
+            hostOffsetY,
+            uiWidth,
+            viewportHeight
+        ]);
+        if (syncSignature === this.lastSyncSignature) {
+            return;
+        }
+        this.lastSyncSignature = syncSignature;
 
         Object.assign(this.form.style, {
             display: nextVisible ? 'grid' : 'none',
@@ -108,6 +126,7 @@ export class AeroLiveNicknameComposer {
         this.compositionActive = false;
         this.compositionSubmitSuppressed = false;
         this.compositionSuppressionGeneration += 1;
+        this.lastSyncSignature = '';
         this.onSubmit = () => {};
     }
 

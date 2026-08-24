@@ -4,6 +4,7 @@ import { runtimeTool } from 'util/runtime_tool.js';
 const APP_PAUSE_DATA = getData('APP_PAUSE_DATA');
 const APP_PAUSE_REASONS = APP_PAUSE_DATA.REASONS;
 const APP_INACTIVE_PAUSE_POLICY = APP_PAUSE_DATA.INACTIVE_POLICY;
+const FRAME_ERROR_LOG_INTERVAL_MS = 5000;
 
 /**
  * @class EngineApp
@@ -25,6 +26,9 @@ export class EngineApp {
         this.maxFixedStepsPerFrame = 6;
         this.accumulatorSeconds = 0;
         this.lastFrameTimestamp = 0;
+        this.lastFrameErrorLogTimestamp = Number.NEGATIVE_INFINITY;
+        this.lastFrameErrorSignature = '';
+        this.suppressedFrameErrorCount = 0;
         this._boundLoop = this.loop.bind(this);
         this._boundWindowActivityChange = this._handleWindowActivityChange.bind(this);
         this._attachWindowActivityListeners();
@@ -94,7 +98,7 @@ export class EngineApp {
                 fixedAlpha: alpha
             });
         } catch (e) {
-            console.warn("프레임 루프 중 오류가 발생했습니다\n", e);
+            this.#reportFrameLoopError(e, now);
         } finally {
             if (shouldMeasurePerformance) {
                 const frameMeasureEnd = performance.now();
@@ -287,6 +291,34 @@ export class EngineApp {
         }
 
         this.stop();
+    }
+
+    /**
+     * 같은 프레임 오류가 매 rAF마다 콘솔과 개발자 도구를 잠그지 않도록 중복 로그를 제한합니다.
+     * 새로운 오류 signature는 즉시 기록하고, 같은 오류는 지정 간격마다 한 번만 기록합니다.
+     * @param {*} error - 포착한 프레임 오류입니다.
+     * @param {number} frameTimestamp - 현재 rAF 시각입니다.
+     * @private
+     */
+    #reportFrameLoopError(error, frameTimestamp) {
+        const timestamp = Number.isFinite(frameTimestamp)
+            ? frameTimestamp
+            : (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const signature = `${error?.name || 'Error'}:${error?.message || String(error)}`;
+        const signatureChanged = signature !== this.lastFrameErrorSignature;
+        const intervalElapsed = timestamp - this.lastFrameErrorLogTimestamp >= FRAME_ERROR_LOG_INTERVAL_MS;
+        if (!signatureChanged && !intervalElapsed) {
+            this.suppressedFrameErrorCount += 1;
+            return;
+        }
+
+        const suppressedSuffix = this.suppressedFrameErrorCount > 0
+            ? ` (${this.suppressedFrameErrorCount}회 중복 로그 생략)`
+            : '';
+        console.warn(`프레임 루프 중 오류가 발생했습니다${suppressedSuffix}\n`, error);
+        this.lastFrameErrorLogTimestamp = timestamp;
+        this.lastFrameErrorSignature = signature;
+        this.suppressedFrameErrorCount = 0;
     }
 
     /**

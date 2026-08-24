@@ -1,4 +1,5 @@
 import { clampFiniteNumber } from 'util/number_util.js';
+import { createDisplayWebGLContextAttributes } from './webgl_context_attributes.js';
 
 /**
  * 동적 surface 캔버스에 기본 적용할 CSS 클래스입니다.
@@ -82,7 +83,7 @@ export class CanvasSurfacePool {
         canvas.style.pointerEvents = 'none';
 
         if (this.type === 'webgl') {
-            const gl = canvas.getContext('webgl', { alpha: true, preserveDrawingBuffer: false });
+            const gl = canvas.getContext('webgl', createDisplayWebGLContextAttributes(true));
             return { canvas, context: gl };
         }
 

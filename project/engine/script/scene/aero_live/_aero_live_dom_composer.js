@@ -22,6 +22,7 @@ export class AeroLiveDomComposer {
         this.compositionSuppressionGeneration = 0;
         this.compositionEnterSubmitPending = false;
         this.compositionEnterSubmitGeneration = 0;
+        this.lastSyncSignature = '';
         this.#createDom();
     }
 
@@ -61,6 +62,26 @@ export class AeroLiveDomComposer {
         const viewportHeight = Math.max(1, Number(state.viewportHeight) || 720);
         const uiWidth = Math.max(1, Number(state.uiWidth) || 1280);
         const borderRenderPixels = Math.max(1, viewportHeight * 0.0017);
+        const syncSignature = JSON.stringify([
+            state.visible === true,
+            state.disabled === true,
+            state.pending === true,
+            Number(state.messagesRemaining),
+            String(state.playerName || ''),
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            scaleRatio,
+            hostOffsetX,
+            hostOffsetY,
+            uiWidth,
+            viewportHeight
+        ]);
+        if (syncSignature === this.lastSyncSignature) {
+            return;
+        }
+        this.lastSyncSignature = syncSignature;
 
         Object.assign(this.form.style, {
             display: state.visible ? 'grid' : 'none',
@@ -126,6 +147,7 @@ export class AeroLiveDomComposer {
         this.compositionSuppressionGeneration += 1;
         this.compositionEnterSubmitPending = false;
         this.compositionEnterSubmitGeneration += 1;
+        this.lastSyncSignature = '';
         this.onSubmit = () => {};
         this.onEscape = () => {};
     }

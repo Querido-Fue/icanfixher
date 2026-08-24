@@ -41,12 +41,13 @@ export function renderDrawRect(context, options) {
 export function renderDrawRoundRect(context, options) {
     if (options.fill !== false) {
         context.beginPath();
-        context.roundRect(
+        traceDrawRoundRectPath(
+            context,
             options.x,
             options.y,
             options.w,
             options.h,
-            normalizeDrawRadius(options.radius, options.w, options.h)
+            options.radius
         );
         context.fill();
     }
@@ -68,14 +69,52 @@ export function renderDrawRoundRect(context, options) {
     }
 
     context.beginPath();
-    context.roundRect(
+    traceDrawRoundRectPath(
+        context,
         options.x + inset,
         options.y + inset,
         width,
         height,
-        normalizeDrawRadius((options.radius || 0) - inset, width, height)
+        (options.radius || 0) - inset
     );
     context.stroke();
+}
+
+/**
+ * 지원 브라우저에서는 native roundRect를 사용하고, 구형 브라우저에서는 동일한 경로를 직접 만듭니다.
+ * @param {CanvasRenderingContext2D} context - 대상 컨텍스트입니다.
+ * @param {number} x - 사각형 시작 X입니다.
+ * @param {number} y - 사각형 시작 Y입니다.
+ * @param {number} width - 사각형 너비입니다.
+ * @param {number} height - 사각형 높이입니다.
+ * @param {number} radius - 모서리 반지름입니다.
+ */
+function traceDrawRoundRectPath(context, x, y, width, height, radius) {
+    const normalizedRadius = normalizeDrawRadius(radius, Math.abs(width), Math.abs(height));
+    if (typeof context.roundRect === 'function') {
+        context.roundRect(x, y, width, height, normalizedRadius);
+        return;
+    }
+
+    const left = Math.min(x, x + width);
+    const right = Math.max(x, x + width);
+    const top = Math.min(y, y + height);
+    const bottom = Math.max(y, y + height);
+    if (normalizedRadius <= 0) {
+        context.rect(left, top, right - left, bottom - top);
+        return;
+    }
+
+    context.moveTo(left + normalizedRadius, top);
+    context.lineTo(right - normalizedRadius, top);
+    context.quadraticCurveTo(right, top, right, top + normalizedRadius);
+    context.lineTo(right, bottom - normalizedRadius);
+    context.quadraticCurveTo(right, bottom, right - normalizedRadius, bottom);
+    context.lineTo(left + normalizedRadius, bottom);
+    context.quadraticCurveTo(left, bottom, left, bottom - normalizedRadius);
+    context.lineTo(left, top + normalizedRadius);
+    context.quadraticCurveTo(left, top, left + normalizedRadius, top);
+    context.closePath();
 }
 
 /**

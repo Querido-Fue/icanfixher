@@ -17,6 +17,7 @@
 !evaluation/test_aero_live_ai_service.mjs
 !evaluation/test_aero_live_api_client.mjs
 !evaluation/test_aero_live_proxy_static_security.mjs
+!evaluation/test_cross_browser_rendering.mjs
 !worker/
 !worker/**
 
