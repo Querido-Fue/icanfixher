@@ -678,7 +678,10 @@ export class AeroLiveRenderer {
         const c = this.context || {};
         const effectStatus = this.wallpaperEffectPass?.getStatus?.() || {};
         const refreshHz = Math.max(1, number(WALLPAPER.BLUR_REFRESH_HZ, 10));
-        const bucket = Math.floor(Math.max(0, number(c.elapsedVisualSeconds)) * refreshHz);
+        const wallpaperPaused = effectStatus.paused === true || c.tutorial?.active === true;
+        const bucket = wallpaperPaused
+            ? 'paused'
+            : Math.floor(Math.max(0, number(c.elapsedVisualSeconds)) * refreshHz);
         const revision = [
             effectStatus.mode || 'static',
             number(effectStatus.resourceRevision),
@@ -745,6 +748,8 @@ export class AeroLiveRenderer {
         const c = this.context;
         this.wallpaperRenderedThisFrame = false;
         this.#ensureWallpaperEffectPass();
+        const tutorialActive = c.tutorial?.active === true;
+        this.wallpaperEffectPass?.setPaused?.(tutorialActive);
         if (this.wallpaperEffectPass && this.glassSession?.effectLayerId) {
             this.wallpaperRenderedThisFrame = this.glassSession.renderBackdropEffect({
                 effectPass: this.wallpaperEffectPass,

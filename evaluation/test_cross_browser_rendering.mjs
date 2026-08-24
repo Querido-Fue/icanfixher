@@ -196,11 +196,102 @@ function testNoPerFrameGpuSynchronization() {
     assert.doesNotMatch(wallpaperSource, /gl\.getError\s*\(/u);
 }
 
+/** 튜토리얼 동안 마지막 backdrop을 재사용하고 ripple 내부 패스를 건너뛰는지 검증합니다. */
+async function testTutorialWallpaperPause() {
+    const { AeroLiveWallpaperEffectPass } = await import(
+        '../project/engine/script/scene/aero_live/_aero_live_wallpaper_effect_pass.js'
+    );
+    const drawCalls = [];
+    const gl = {
+        drawingBufferWidth: 64,
+        drawingBufferHeight: 36,
+        FRAMEBUFFER: 0x8D40,
+        ARRAY_BUFFER: 0x8892,
+        TEXTURE_2D: 0x0DE1,
+        TEXTURE0: 0x84C0,
+        TRIANGLES: 0x0004,
+        FLOAT: 0x1406,
+        BLEND: 0x0BE2,
+        DEPTH_TEST: 0x0B71,
+        CULL_FACE: 0x0B44,
+        SCISSOR_TEST: 0x0C11,
+        isContextLost: () => false,
+        bindFramebuffer: () => {},
+        viewport: () => {},
+        disable: () => {},
+        colorMask: () => {},
+        useProgram: () => {},
+        bindBuffer: () => {},
+        enableVertexAttribArray: () => {},
+        vertexAttribPointer: () => {},
+        activeTexture: () => {},
+        bindTexture: () => {},
+        uniform1i: () => {},
+        drawArrays: (...args) => drawCalls.push(args),
+        deleteFramebuffer: () => {},
+        deleteTexture: () => {},
+        deleteProgram: () => {},
+        deleteBuffer: () => {}
+    };
+    const pass = new AeroLiveWallpaperEffectPass({ imageFactory: () => null });
+    const baseTexture = {};
+    const target = { framebuffer: {}, texture: {} };
+    pass.gl = gl;
+    pass.resources.quadBuffer = {};
+    pass.resources.programs.copy = {
+        program: {},
+        position: 0,
+        uniforms: { u_texture: {} }
+    };
+    Object.assign(pass.assets.base, {
+        ready: true,
+        failed: false,
+        texture: baseTexture,
+        width: 1920,
+        height: 1080
+    });
+
+    pass.setPaused(true);
+    const initial = pass.render({ gl, target, width: 64, height: 36, timeSeconds: 1 });
+    assert.equal(initial.rendered, true);
+    assert.deepEqual(initial.internalPassOrder, ['copy']);
+    assert.equal(drawCalls.length, 1);
+
+    const cached = pass.render({ gl, target, width: 64, height: 36, timeSeconds: 2 });
+    assert.equal(cached.rendered, true);
+    assert.deepEqual(cached.internalPassOrder, []);
+    assert.equal(drawCalls.length, 1, '정지 프레임은 fullscreen ripple 패스를 다시 그리면 안 됩니다.');
+    assert.equal(pass.getStatus().metrics.pausedCacheHits, 1);
+
+    pass.setPaused(false);
+    const resumed = pass.render({
+        gl,
+        target,
+        width: 64,
+        height: 36,
+        timeSeconds: 3,
+        deltaSeconds: 1 / 60
+    });
+    assert.equal(resumed.rendered, true);
+    assert.deepEqual(resumed.internalPassOrder, ['copy']);
+    assert.equal(drawCalls.length, 2);
+    assert.equal(pass.getStatus().paused, false);
+    pass.destroy();
+
+    const rendererSource = fs.readFileSync(
+        new URL('../project/engine/script/scene/aero_live/_aero_live_renderer.js', import.meta.url),
+        'utf8'
+    );
+    assert.match(rendererSource, /setPaused\?\.\(tutorialActive\)/u);
+    assert.match(rendererSource, /wallpaperPaused[\s\S]*?'paused'/u);
+}
+
 await testRenderTargetCap();
 testDynamicSurfaceResolutionPolicy();
 testRoundRectFallback();
 await testWebGLContextAttributes();
 testFrameErrorLogThrottle();
 testNoPerFrameGpuSynchronization();
+await testTutorialWallpaperPause();
 
 console.log('교차 브라우저 렌더링 회귀 테스트 통과');

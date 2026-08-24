@@ -311,6 +311,10 @@ export class AeroLiveWallpaperEffectPass {
         this.pointerCurrent = { x: 0.5, y: 0.5 };
         this.pointerLast = { x: 0.5, y: 0.5 };
         this.pointerInitialized = false;
+        this.paused = false;
+        this.pauseStartedSeconds = null;
+        this.pausedDurationSeconds = 0;
+        this.lastOutputTarget = null;
         this.lastRenderSeconds = null;
         this.lastWidth = 0;
         this.lastHeight = 0;
@@ -332,6 +336,8 @@ export class AeroLiveWallpaperEffectPass {
             fullFrames: 0,
             waterOnlyFrames: 0,
             staticFrames: 0,
+            pausedFrames: 0,
+            pausedCacheHits: 0,
             resourceAllocations: { textures: 0, framebuffers: 0, programs: 0, buffers: 0 },
             resourceDeletions: { textures: 0, framebuffers: 0, programs: 0, buffers: 0 }
         };
@@ -348,6 +354,16 @@ export class AeroLiveWallpaperEffectPass {
         this.pointerInitialized = false;
     }
 
+    /** 튜토리얼처럼 정적 backdrop이 필요한 동안 ripple 계산을 멈춥니다. */
+    setPaused(value) {
+        const paused = value === true;
+        if (paused === this.paused) {
+            return;
+        }
+        this.paused = paused;
+        this.resetPointer();
+    }
+
     /** WebGL context lost 이벤트에서 호출합니다. */
     handleContextLost() {
         if (!this.contextLost) {
@@ -357,6 +373,7 @@ export class AeroLiveWallpaperEffectPass {
         this.resourceRevision += 1;
         this.gl = null;
         this.#abandonGLResources();
+        this.lastOutputTarget = null;
         this.resetPointer();
         this.fallbackReason = 'webgl-context-lost';
     }
@@ -366,6 +383,7 @@ export class AeroLiveWallpaperEffectPass {
         this.contextLost = false;
         this.gl = null;
         this.#abandonGLResources();
+        this.lastOutputTarget = null;
         this.resetPointer();
         this.fallbackReason = 'webgl-context-restoring';
     }
@@ -408,15 +426,20 @@ export class AeroLiveWallpaperEffectPass {
         if (resized) {
             this.lastWidth = width;
             this.lastHeight = height;
+            this.lastOutputTarget = null;
             this.resetPointer();
             this.#destroyTarget(this.resources.waterTarget);
             this.resources.waterTarget = null;
             this.#clearSimulation();
         }
 
+        const timeSeconds = this.#resolveEffectTime(options.timeSeconds ?? options.elapsedSeconds);
+        if (this.paused) {
+            return this.#renderPaused(target, destinationFramebuffer, width, height);
+        }
+
         this.#resolveMode(width, height);
         this.#updatePointer(options.pointer, options.resetPointer === true, options.viewport);
-        const timeSeconds = this.#resolveTime(options.timeSeconds ?? options.elapsedSeconds);
         const deltaSeconds = this.#resolveDelta(options.deltaSeconds, timeSeconds);
         this.lastStepSeconds = deltaSeconds;
         this.lastPassOrder = [];
@@ -439,6 +462,7 @@ export class AeroLiveWallpaperEffectPass {
             this.metrics.renders += 1;
             this.ready = true;
             this.failed = false;
+            this.#rememberOutputTarget(target, width, height);
         } else if (this.assets.base.failed || this.fallbackReason === 'webgl-initialization-failed') {
             this.failed = true;
         }
@@ -461,6 +485,7 @@ export class AeroLiveWallpaperEffectPass {
         return {
             ready: this.ready,
             failed: this.failed,
+            paused: this.paused,
             mode: this.mode,
             contextLost: this.contextLost,
             fallbackReason: this.fallbackReason,
@@ -498,6 +523,7 @@ export class AeroLiveWallpaperEffectPass {
         this.destroyed = true;
         this.#releaseGLResources();
         this.gl = null;
+        this.lastOutputTarget = null;
         this.ready = false;
     }
 
@@ -605,6 +631,7 @@ export class AeroLiveWallpaperEffectPass {
 
     #abandonGLResources() {
         this.resources = this.#emptyResources();
+        this.lastOutputTarget = null;
         for (const asset of Object.values(this.assets)) {
             asset.texture = null;
         }
@@ -1002,6 +1029,76 @@ export class AeroLiveWallpaperEffectPass {
         return Date.now() / 1000;
     }
 
+    /** 정지 구간을 제외한 effect 전용 시각을 반환합니다. */
+    #resolveEffectTime(value) {
+        const inputSeconds = this.#resolveTime(value);
+        if (this.paused) {
+            if (this.pauseStartedSeconds === null) {
+                this.pauseStartedSeconds = inputSeconds;
+            }
+            return Math.max(0, this.pauseStartedSeconds - this.pausedDurationSeconds);
+        }
+        if (this.pauseStartedSeconds !== null) {
+            this.pausedDurationSeconds += Math.max(0, inputSeconds - this.pauseStartedSeconds);
+            this.pauseStartedSeconds = null;
+        }
+        return Math.max(0, inputSeconds - this.pausedDurationSeconds);
+    }
+
+    /** 마지막 완성 backdrop을 재사용하고, 없을 때만 base texture를 한 번 복사합니다. */
+    #renderPaused(target, framebuffer, width, height) {
+        this.lastStepSeconds = 0;
+        this.lastPassOrder = [];
+        this.metrics.pausedFrames += 1;
+
+        if (this.#canReuseOutputTarget(target, width, height)) {
+            this.metrics.pausedCacheHits += 1;
+            return this.#renderResult(true, target, width, height);
+        }
+
+        const rendered = !!(
+            this.assets.base.texture
+            && this.resources.programs.copy
+            && this.#renderCopy(this.assets.base.texture, framebuffer, width, height)
+        );
+        this.#finishFrame();
+        if (rendered) {
+            this.frameCount += 1;
+            this.metrics.renders += 1;
+            this.metrics.staticFrames += 1;
+            this.ready = true;
+            this.failed = false;
+            this.#rememberOutputTarget(target, width, height);
+        } else if (this.assets.base.failed || this.fallbackReason === 'webgl-initialization-failed') {
+            this.failed = true;
+        }
+        return this.#renderResult(rendered, target, width, height);
+    }
+
+    /** overlay가 소유한 같은 target에 완성된 backdrop이 남아 있는지 확인합니다. */
+    #canReuseOutputTarget(target, width, height) {
+        return !!(
+            target?.texture
+            && this.lastOutputTarget
+            && this.lastOutputTarget.texture === target.texture
+            && this.lastOutputTarget.framebuffer === (target.framebuffer ?? null)
+            && this.lastOutputTarget.width === width
+            && this.lastOutputTarget.height === height
+        );
+    }
+
+    /** 다음 정지 프레임에서 재사용할 overlay target 식별자만 보관합니다. */
+    #rememberOutputTarget(target, width, height) {
+        this.lastOutputTarget = target?.texture
+            ? {
+                texture: target.texture,
+                framebuffer: target.framebuffer ?? null,
+                width,
+                height
+            }
+            : null;
+    }
+
     #resolveDelta(value, timeSeconds) {
         const numeric = Number(value);
         let delta = Number.isFinite(numeric)
@@ -1186,6 +1283,7 @@ export class AeroLiveWallpaperEffectPass {
             asset.texture = null;
         }
         this.resources = this.#emptyResources();
+        this.lastOutputTarget = null;
     }
 
     #isWebGL2(gl) {
