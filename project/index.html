@@ -1,13 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
+
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0; url=./engine/">
     <title>I Can Fix Her!</title>
-    <script>location.replace('./engine/');</script>
+    <base href="./engine/">
+    <link rel="stylesheet" type="text/css" href="./style.css">
+    <link rel="icon" type="image/ico" href="../asset/icon/logo.ico">
+    <script type="importmap">
+    {
+        "imports": {
+            "engine/": "./script/",
+            "core/": "./script/core/",
+            "display/": "./script/display/",
+            "scene/": "./script/scene/",
+            "simulation/": "./script/simulation/",
+            "ui/": "./script/ui/",
+            "util/": "./script/util/",
+            "animation/": "./script/animation/",
+            "runtime/": "./script/runtime/",
+            "input/": "./script/input/",
+            "data/": "./script/data/",
+            "object/": "./script/object/",
+            "debug/": "./script/debug/",
+            "overlay/": "./script/overlay/"
+        }
+    }
+    </script>
 </head>
+
 <body>
-    <a href="./engine/">I Can Fix Her! 시작</a>
+    <section id="loading-screen" aria-live="polite" aria-label="I Can Fix Her! 로딩 중">
+        <div class="loading-card">
+            <p class="loading-kicker">I Can Fix Her!</p>
+            <h1>방송 준비 중</h1>
+            <p id="loading-message">필수 리소스를 불러오고 있습니다.</p>
+            <div id="loading-progress-track" class="loading-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="loading-progress-bar" class="loading-progress-bar"></div>
+            </div>
+            <p id="loading-progress-text" class="loading-progress-text">0%</p>
+        </div>
+    </section>
+    <canvas class="canvas" id="background"></canvas>
+    <canvas class="canvas" id="object"></canvas>
+    <canvas class="canvas" id="effect"></canvas>
+    <canvas class="canvas" id="texteffect"></canvas>
+    <canvas class="canvas" id="ui"></canvas>
+    <div id="overlaylayerhost"></div>
+    <canvas class="canvas" id="vignette"></canvas>
+    <canvas class="canvas" id="top"></canvas>
+    <script type="module" src="./script/main.js"></script>
 </body>
+
 </html>
