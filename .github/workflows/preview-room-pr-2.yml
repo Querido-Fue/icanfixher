@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 924b596fc94268e56b6e6274a32fa0dbccca752c
+          ref: e33e7f97f7754af40ea459a997f7b868542199d0
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -107,7 +107,12 @@ jobs:
               await mobile.setViewportSize({width:844,height:390});
               const start=mobile.getByRole('button',{name:names[2],exact:true});
               await start.waitFor();
-              await start.tap();
+              console.log('ROTATED',await start.evaluate(e=>{
+                  const r=e.getBoundingClientRect(),actual=visualViewport;
+                  const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                  return JSON.stringify({button:r.toJSON(),inner:[innerWidth,innerHeight],visual:[actual.width,actual.height,actual.scale],root:document.querySelector('.studio-title').getBoundingClientRect().toJSON(),hit:hit?.className});
+              }));
+              await start.tap({timeout:10000});
               await start.locator('span').waitFor({state:'visible'});
               await mobile.close();
               const fallback=await open(true,true);
