@@ -1,64 +1,11 @@
-name: Temporary studio preview for PR 2
+name: Check the published temporary studio URL
 on:
   push:
     branches: [preview-room-pr-2]
+    paths: ['.github/workflows/preview-room-pr-2.yml']
 permissions: {}
-concurrency:
-  group: pages
-  cancel-in-progress: false
 jobs:
-  assemble:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      deployments: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: f575699b0b5c820828cf60cb126d945efd1b169d
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: github-pages
-          run-id: 45372972832
-          github-token: ${{ github.token }}
-          path: original
-      - name: Preserve the currently published site and add the preview
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          test "$(gh api repos/$GITHUB_REPOSITORY/git/ref/heads/main --jq '.object.sha')" = 6349ff7dd0676c199313ec6e64b4635476ae0c6e
-          deployed=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=1" --jq '.[0].sha')
-          test "$deployed" = 6349ff7dd0676c199313ec6e64b4635476ae0c6e
-          mkdir dist
-          tar -xf original/artifact.tar -C dist
-          test -f dist/index.html
-          test ! -e dist/preview/pr-2
-          dest=dist/preview/pr-2
-          mkdir -p "$dest"
-          cp -R project/engine project/asset project/license project/index.html "$dest/"
-          test -z "$(find "$dest" \( -type l -o -iname api_key.txt \) -print -quit)"
-          curl --retry 3 -fsSL "https://querido-fue.github.io/icanfixher/engine/script/scene/title/_studio_room.js?check=6349ff7dd0676c199313ec6e64b4635476ae0c6e" -o "$RUNNER_TEMP/room-live.js"
-          cmp "$RUNNER_TEMP/room-live.js" dist/engine/script/scene/title/_studio_room.js
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
-    needs: assemble
-    environment:
-      name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}preview/pr-2/
-    permissions:
-      pages: write
-      id-token: write
-    runs-on: ubuntu-latest
-    steps:
-      - id: pages
-        uses: actions/deploy-pages@v4
   verify:
-    needs: deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -80,6 +27,10 @@ jobs:
             sleep 5
           done
           cmp project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"
+          for file in index.html engine/title.css engine/script/scene/title/_studio_room.js; do
+            curl --retry-all-errors --retry 3 -fsSL "$base/$file" -o "$RUNNER_TEMP/served"
+            cmp "project/$file" "$RUNNER_TEMP/served"
+          done
           export PREVIEW_URL="$base/" QA_CHROME="$(command -v google-chrome)"
           npm install --no-save --prefix "$RUNNER_TEMP/preview-qa" playwright-core@1.56.1
           cat > "$RUNNER_TEMP/preview-qa/check.mjs" <<'JS'
