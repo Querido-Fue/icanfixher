@@ -63,6 +63,11 @@ export class TitleScene extends BaseScene {
         document.body.append(this.root);
         window.addEventListener('keydown', e => this.onKey(e), { signal: this.events.signal });
         this.host.addEventListener('webglcontextlost', () => this.showStill(), { capture: true, signal: this.events.signal });
+        this.viewport = window.visualViewport;
+        for (const type of ['resize', 'scroll']) {
+            this.viewport?.addEventListener(type, () => this.fitViewport(), { signal: this.events.signal });
+        }
+        this.fitViewport();
         this.layout = new ResizeObserver(() => this.resize());
         this.layout.observe(this.host);
         this.roomRequest = 0;
@@ -96,6 +101,16 @@ export class TitleScene extends BaseScene {
     }
 
     whenReadyForTransition() { return this.ready; }
+    fitViewport() {
+        if (!this.viewport) return;
+        const { width, height, offsetLeft, offsetTop } = this.viewport;
+        // On rotation the mobile browser can keep a zoomed visual viewport.
+        Object.assign(this.root.style, {
+            left: offsetLeft + 'px', top: offsetTop + 'px',
+            width: width + 'px', height: height + 'px'
+        });
+    }
+
     resize() { this.room?.resize(); }
     draw() {
         if (this.room?.render() && !this.hotspots.hidden) this.positionHotspots();
