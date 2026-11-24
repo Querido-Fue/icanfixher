@@ -24,14 +24,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check out the reviewed room snapshot
-        if: github.event_name == 'push' && github.event.before == '6349ff7dd0676c199313ec6e64b4635476ae0c6e' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')
-        uses: actions/checkout@v4
-        with:
-          ref: f575699b0b5c820828cf60cb126d945efd1b169d
-          path: room-preview-source
-          persist-credentials: false
-
       - name: Prepare static site
         run: |
           mkdir -p dist
@@ -42,18 +34,6 @@ jobs:
             echo 'Refusing to deploy an api_key.txt file to GitHub Pages.' >&2
             exit 1
           fi
-
-      - name: Add the temporary preview under its own URL
-        if: github.event_name == 'push' && github.event.before == '6349ff7dd0676c199313ec6e64b4635476ae0c6e' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')
-        run: |
-          set -euo pipefail
-          dest=dist/preview/pr-2
-          test ! -e "$dest"
-          mkdir -p "$dest"
-          cp -R room-preview-source/project/{index.html,engine,asset,license} "$dest/"
-          test -z "$(find "$dest" \( -type l -o -iname api_key.txt \) -print -quit)"
-          curl --retry 3 -fsSL 'https://querido-fue.github.io/icanfixher/engine/script/scene/title/_studio_room.js' -o "$RUNNER_TEMP/original-room.js"
-          cmp dist/engine/script/scene/title/_studio_room.js "$RUNNER_TEMP/original-room.js"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -68,7 +48,6 @@ jobs:
         uses: actions/deploy-pages@v4
 
   deploy-game-domain:
-    if: ${{ !(github.event_name == 'push' && github.event.before == '6349ff7dd0676c199313ec6e64b4635476ae0c6e' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')) }}
     needs: deploy
     runs-on: ubuntu-latest
     permissions:
