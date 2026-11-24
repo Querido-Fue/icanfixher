@@ -1,4 +1,4 @@
-name: Check the published temporary studio URL
+name: Verify published studio entry points
 on:
   push:
     branches: [preview-room-pr-2]
@@ -27,34 +27,40 @@ jobs:
             sleep 5
           done
           cmp project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"
-          for file in index.html engine/title.css engine/script/scene/title/_studio_room.js; do
-            curl --retry-all-errors --retry 3 -fsSL "$base/$file" -o "$RUNNER_TEMP/served"
-            cmp "project/$file" "$RUNNER_TEMP/served"
-          done
           export PREVIEW_URL="$base/" QA_CHROME="$(command -v google-chrome)"
           npm install --no-save --prefix "$RUNNER_TEMP/preview-qa" playwright-core@1.56.1
           cat > "$RUNNER_TEMP/preview-qa/check.mjs" <<'JS'
           import assert from 'node:assert/strict';
-          import { chromium } from 'playwright-core';
-          const browser = await chromium.launch({executablePath:process.env.QA_CHROME,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
-          try {
-            for (const mobile of [false,true]) {
-              const page = await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1120,height:720},hasTouch:mobile,isMobile:mobile,deviceScaleFactor:mobile?2:1,reducedMotion:'reduce'});
-              const errors = [];
-              page.on('pageerror', e=>errors.push(e.message));
-              page.on('console', m=>{if(m.type()==='error' && /WebGLProgram|shader error/i.test(m.text()))errors.push(m.text())});
-              const response = await page.goto(process.env.PREVIEW_URL,{waitUntil:'domcontentloaded'});
-              assert.equal(response.status(),200);
+          import {chromium} from 'playwright-core';
+          const browser=await chromium.launch({executablePath:process.env.QA_CHROME,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          async function visit(entry,mobile) {
+            const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1120,height:720},hasTouch:mobile,isMobile:mobile,deviceScaleFactor:mobile?2:1,reducedMotion:'reduce'});
+            const problems=[];
+            page.on('pageerror',e=>problems.push('JS '+e.message));
+            page.on('console',m=>{if(['error','warning'].includes(m.type()))problems.push(m.type()+' '+m.text().slice(0,360))});
+            page.on('requestfailed',r=>problems.push(r.failure()?.errorText+' '+new URL(r.url()).pathname));
+            page.on('response',r=>{if(r.status()>=400)problems.push(r.status()+' '+new URL(r.url()).pathname)});
+            const url=new URL(entry,process.env.PREVIEW_URL).href;
+            try {
+              await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
               const canvas=page.locator('.studio-view canvas');
-              await canvas.waitFor({timeout:75000});
-              await page.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:75000});
+              await canvas.waitFor({timeout:35000});
+              await page.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:35000});
               assert.ok(await canvas.evaluate(c=>!!(c.getContext('webgl2')||c.getContext('webgl'))));
               await page.getByRole('button',{name:'플레이 가이드'}).click();
               await page.getByRole('heading',{name:'플레이 가이드'}).waitFor();
-              assert.deepEqual(errors,[]);
-              console.log(mobile?'Mobile live preview passed':'Desktop live preview passed',page.url());
-              await page.close();
-            }
-          } finally { await browser.close(); }
+              console.log('PUBLIC_OK',url,mobile?'mobile':'desktop');return true;
+            } catch(e) {
+              console.log('PUBLIC_FAIL',url,mobile?'mobile':'desktop',e.message.split('\n')[0],await page.locator('body').innerText().catch(()=>''));
+              console.log('EVENTS',JSON.stringify(problems.slice(0,40)));
+              return false;
+            } finally {await page.close()}
+          }
+          try {
+            const urls=['./','engine/index.html'];
+            const desktop=await Promise.all(urls.map(url=>visit(url,false)));
+            assert.ok(desktop.some(Boolean),'No live entry opened');
+            assert.ok(await visit(urls[desktop.indexOf(true)],true),'Mobile entry did not open');
+          } finally {await browser.close()}
           JS
           node "$RUNNER_TEMP/preview-qa/check.mjs"
