@@ -5,7 +5,11 @@
     --muted: #365e70;
     --accent: #086883;
     position: fixed;
-    inset: 0;
+    inset: 0 auto auto 0;
+    /* Game canvases can overflow the mobile layout viewport during startup. */
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
     z-index: 55;
     isolation: isolate;
     overflow: hidden;
@@ -49,7 +53,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, #e6f7f6f5 0%, #e4f6f3ed 18%, #e4f6f3c2 30%, #e4f6f31e 43%, transparent 54%);
+    background: linear-gradient(90deg, #e6f7f6f2 0%, #e4f6f3de 16%, #e4f6f39c 25%, #e4f6f32b 35%, transparent 45%);
 }
 .studio-status, .studio-caption {
     background: #eefaf2e8;

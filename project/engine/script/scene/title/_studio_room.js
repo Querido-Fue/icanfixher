@@ -40,7 +40,7 @@ export class StudioRoom {
                 this.renderer.shadowMap.autoUpdate = false;
                 this.renderer.shadowMap.needsUpdate = true;
             }
-            const sky = new THREE.HemisphereLight('#d9efff', '#dcc5a6', 1.16);
+            const sky = new THREE.HemisphereLight('#d9efff', '#c8ded3', 1.28);
             // Grazing sun enters through the cut-out bay window and its real mullions.
             const key = new THREE.DirectionalLight('#ffdeb0', 2.65);
             key.position.set(-8.2, 6.65, -3.35);
