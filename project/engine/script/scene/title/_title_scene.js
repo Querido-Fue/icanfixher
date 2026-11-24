@@ -1,212 +1,197 @@
 import { BaseScene } from 'scene/_base_scene.js';
-import { getData } from 'data/data_handler.js';
-import { getWH, getUIOffsetX, getUIWW, getWW, render, renderGL } from 'display/display_system.js';
-import { ColorSchemes } from 'display/_theme_handler.js';
 import { getDelta } from 'engine/time_handler.js';
-import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
-import { waitForSceneReadyCondition } from 'scene/_scene_transition_ready.js';
 
-const TITLE_SCENE_CONSTANTS = getData('TITLE_SCENE_CONSTANTS');
-const TRANSPARENT_BUTTON_COLOR = 'rgba(255,255,255,0)';
+const stations = [
+    { id: 'desk', label: '방송 시작', view: '방송 데스크' },
+    { id: 'shelf', label: '플레이 가이드', view: '레코드 선반' },
+    { id: 'door', label: '게임 종료', view: '방문' }
+];
 
-/**
- * @class TitleScene
- * @description 타이틀 이미지와 이미지 위 투명 버튼 히트박스를 렌더링합니다.
- */
 export class TitleScene extends BaseScene {
-    /**
-     * @param {object} sceneSystem - 씬 시스템 인스턴스입니다.
-     */
     constructor(sceneSystem) {
         super(sceneSystem);
-        this.elapsedSeconds = 0;
-        this.buttons = [];
-        this.titleImage = new Image();
-        this.titleImageReady = false;
-        this.titleImageFailed = false;
-        this.isDestroyed = false;
-        this.titleImage.onload = () => {
-            this.titleImageReady = true;
-        };
-        this.titleImage.onerror = () => {
-            this.titleImageFailed = true;
-        };
-        this.titleImage.src = TITLE_SCENE_CONSTANTS.TITLE_IMAGE_PATH;
-        this.#syncViewport();
-    }
-
-    /**
-     * @override
-     */
-    update() {
-        this.elapsedSeconds += getDelta();
-        for (const button of this.buttons) {
-            button.update();
-        }
-    }
-
-    /**
-     * @override
-     */
-    draw() {
-        this.#drawTitleImage();
-        for (const button of this.buttons) {
-            button.draw();
-        }
-    }
-
-    /**
-     * @override
-     */
-    whenReadyForTransition() {
-        return waitForSceneReadyCondition(() => {
-            return this.isDestroyed || this.titleImageReady || this.titleImageFailed;
-        });
-    }
-
-    /**
-     * @override
-     */
-    resize() {
-        this.#syncViewport();
-    }
-
-    /**
-     * @override
-     */
-    destroy() {
-        this.isDestroyed = true;
-        this.#releaseButtons();
-        this.titleImage.onload = null;
-        this.titleImage.onerror = null;
-    }
-
-    /**
-     * 현재 화면 기준 레이아웃을 다시 계산합니다.
-     * @private
-     */
-    #syncViewport() {
-        this.WW = getWW();
-        this.WH = getWH();
-        this.UIWW = getUIWW();
-        this.UIOffsetX = getUIOffsetX();
-        this.#buildButtons();
-    }
-
-    /**
-     * 타이틀 메뉴 버튼을 생성합니다.
-     * @private
-     */
-    #buildButtons() {
-        this.#releaseButtons();
-
-        this.buttons = TITLE_SCENE_CONSTANTS.BUTTONS.map((buttonData) => {
-            const rect = this.#resolveButtonRect(buttonData);
-            const button = UIPool.button.get();
-            button.init({
-                parent: this,
-                layer: 'ui',
-                x: rect.x,
-                y: rect.y,
-                width: rect.w,
-                height: rect.h,
-                radius: 0,
-                margin: 0,
-                itemSpacing: 0,
-                color: TRANSPARENT_BUTTON_COLOR,
-                idleColor: TRANSPARENT_BUTTON_COLOR,
-                hoverColor: TRANSPARENT_BUTTON_COLOR,
-                strokeColor: TRANSPARENT_BUTTON_COLOR,
-                hoverStrokeColor: TRANSPARENT_BUTTON_COLOR,
-                lineWidth: 0,
-                alpha: 0,
-                activateOnPress: true,
-                onClick: () => this.#runButtonAction(buttonData.id)
+        this.events = new AbortController();
+        this.root = document.createElement('main');
+        this.root.className = 'studio-title';
+        this.root.setAttribute('aria-label', 'I Can Fix Her! 타이틀');
+        this.root.innerHTML = `
+            <div class="studio-view" aria-hidden="true"></div>
+            <header class="studio-header">
+                <span class="studio-channel"><i aria-hidden="true">✳</i> AQUA STUDIO</span>
+                <span class="studio-status"><i></i> STANDBY</span>
+            </header>
+            <div class="studio-copy">
+                <div class="studio-home">
+                    <h1 lang="en"><span>I Can</span><em>Fix Her!</em></h1>
+                    <nav class="studio-menu" aria-label="타이틀 메뉴"></nav>
+                </div>
+                <section class="studio-detail" aria-labelledby="studio-detail-heading" hidden>
+                    <h2 id="studio-detail-heading"></h2>
+                    <div class="studio-detail-body"></div>
+                    <div class="studio-actions"></div>
+                </section>
+            </div>
+            <footer class="studio-footer">
+                <span class="studio-keys"><kbd>↑</kbd><kbd>↓</kbd> 이동 <kbd>Enter</kbd> 선택</span>
+                <span class="studio-caption"><i aria-hidden="true"></i><span>방 전경</span></span>
+            </footer>`;
+        this.host = this.root.querySelector('.studio-view');
+        this.home = this.root.querySelector('.studio-home');
+        this.panel = this.root.querySelector('.studio-detail');
+        this.menu = this.root.querySelector('nav');
+        this.caption = this.root.querySelector('.studio-caption span');
+        this.buttons = stations.map(station => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = station.label;
+            button.addEventListener('pointerenter', e => {
+                if (e.pointerType !== 'touch') this.preview(station);
             });
+            button.addEventListener('focus', () => this.preview(station));
+            button.addEventListener('click', () => this.activate(station));
+            this.menu.append(button);
             return button;
         });
-    }
-
-    /**
-     * 타이틀 메뉴 버튼을 회수합니다.
-     * @private
-     */
-    #releaseButtons() {
-        for (const button of this.buttons) {
-            releaseUIItem(button);
-        }
-        this.buttons = [];
-    }
-
-    /**
-     * 타이틀 이미지를 UI 기준 16:9 영역에 맞춰 그립니다.
-     * @private
-     */
-    #drawTitleImage() {
-        renderGL('background', {
-            shape: 'rect',
-            x: this.WW * 0.5,
-            y: this.WH * 0.5,
-            w: this.WW,
-            h: this.WH,
-            fill: ColorSchemes.Background
+        this.menu.addEventListener('pointerleave', () => {
+            if (!this.busy && !this.home.hidden) this.overview();
         });
+        document.body.append(this.root);
+        window.addEventListener('keydown', e => this.onKey(e), { signal: this.events.signal });
+        this.host.addEventListener('webglcontextlost', () => this.showStill(), { capture: true, signal: this.events.signal });
+        this.ready = this.loadRoom();
+    }
 
-        if (!this.titleImageReady) {
+    async loadRoom() {
+        try {
+            const { StudioRoom } = await import('./_studio_room.js');
+            if (this.events.signal.aborted) return;
+            this.room = new StudioRoom(this.host);
+            this.host.classList.add('is-rendered');
+        } catch (error) {
+            console.warn('[TitleScene] 정적 방송실 배경을 사용합니다.', error);
+            this.showStill();
+        }
+    }
+
+    showStill() {
+        const room = this.room;
+        this.room = null;
+        this.host.classList.remove('is-rendered');
+        room?.dispose();
+    }
+
+    whenReadyForTransition() { return this.ready; }
+    resize() { this.room?.resize(); }
+    draw() { this.room?.render(); }
+
+    update() {
+        const settled = this.room?.advance(getDelta()) ?? true;
+        if (this.pending && settled) {
+            const id = this.pending;
+            this.pending = null;
+            if (id === 'desk') {
+                this.sceneSystem.startScene('aeroLive');
+            } else {
+                this.busy = false;
+                this.showPanel(id);
+            }
+        }
+    }
+
+    overview() {
+        this.room?.frame('overview');
+        delete this.root.dataset.shot;
+        this.caption.textContent = '방 전경';
+        for (const button of this.buttons) button.classList.remove('is-selected');
+    }
+
+    preview(station) {
+        if (this.busy || this.home.hidden) return;
+        this.frameStation(station, 0.55);
+    }
+
+    frameStation(station, strength) {
+        this.root.dataset.shot = station.id;
+        this.caption.textContent = station.view;
+        this.buttons.forEach((button, i) => button.classList.toggle('is-selected', stations[i] === station));
+        this.room?.frame(station.id, strength);
+    }
+
+    activate(station) {
+        if (this.busy || this.home.hidden) return;
+        this.busy = true;
+        this.pending = station.id;
+        this.frameStation(station, 1);
+    }
+
+    showPanel(id) {
+        this.home.hidden = true;
+        this.panel.hidden = false;
+        const heading = this.panel.querySelector('h2');
+        const body = this.panel.querySelector('.studio-detail-body');
+        const actions = this.panel.querySelector('.studio-actions');
+        actions.replaceChildren();
+        if (id === 'shelf') {
+            heading.textContent = '플레이 가이드';
+            body.innerHTML = '<dl><dt>방송 준비</dt><dd>닉네임을 입력하고 오늘 아쿠아가 방송할 주제를 고르세요.</dd><dt>채팅 관리</dt><dd>방송마다 세 번 채팅을 보낼 수 있어요. 핵심 채팅은 선택해서 삭제하거나 시청자를 강퇴할 수 있습니다.</dd><dt>후원 대응</dt><dd>시청자의 후원 메시지와 아쿠아의 상태를 살피며 방송을 이어가세요.</dd></dl>';
+        } else if (id === 'door') {
+            heading.textContent = '방송실을 나갈까요?';
+            body.textContent = '타이틀 메뉴에서 게임을 종료합니다.';
+        } else {
+            heading.textContent = '방송실을 나왔어요.';
+            body.textContent = '이제 이 탭을 닫아도 됩니다.';
+        }
+        const add = (label, action) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.addEventListener('click', action);
+            actions.append(button);
+            return button;
+        };
+        const back = add(id === 'door' ? '머무르기' : '타이틀로 돌아가기', () => this.returnHome());
+        if (id === 'door') add('게임 종료', () => {
+            if (window.nw?.Window && typeof window.Game?.close === 'function') window.Game.close();
+            else this.showPanel('closed');
+        });
+        back.focus({ preventScroll: true });
+    }
+
+    returnHome() {
+        const focusIndex = stations.findIndex(station => station.id === this.root.dataset.shot);
+        this.panel.hidden = true;
+        this.home.hidden = false;
+        this.buttons[Math.max(0, focusIndex)].focus({ preventScroll: true });
+        this.overview();
+    }
+
+    onKey(event) {
+        if (event.altKey || event.ctrlKey || event.metaKey || this.busy) return;
+        if (event.key === 'Escape') {
+            if (!this.panel.hidden) this.returnHome();
+            else this.overview();
+            event.preventDefault();
             return;
         }
-
-        const rect = this.#getTitleImageRect();
-
-        render('ui', {
-            shape: 'image',
-            image: this.titleImage,
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-            smoothing: false
-        });
-    }
-
-    /**
-     * 타이틀 이미지가 표시되는 화면 영역을 반환합니다.
-     * @returns {{x:number, y:number, w:number, h:number}} 타이틀 이미지 렌더 영역입니다.
-     * @private
-     */
-    #getTitleImageRect() {
-        return {
-            x: this.UIOffsetX,
-            y: 0,
-            w: this.UIWW,
-            h: this.WH
-        };
-    }
-
-    /**
-     * 타이틀 이미지 비율 좌표를 실제 버튼 히트박스 좌표로 변환합니다.
-     * @param {{x:number, y:number, width:number, height:number}} buttonData - 이미지 기준 버튼 비율 데이터입니다.
-     * @returns {{x:number, y:number, w:number, h:number}} 화면 좌표계 버튼 영역입니다.
-     * @private
-     */
-    #resolveButtonRect(buttonData) {
-        const titleRect = this.#getTitleImageRect();
-        return {
-            x: titleRect.x + (titleRect.w * (buttonData.x / 100)),
-            y: titleRect.y + (titleRect.h * (buttonData.y / 100)),
-            w: titleRect.w * (buttonData.width / 100),
-            h: titleRect.h * (buttonData.height / 100)
-        };
-    }
-
-    /**
-     * 타이틀 메뉴 버튼 동작을 실행합니다.
-     * @param {string} buttonId - 버튼 식별자입니다.
-     * @private
-     */
-    #runButtonAction(buttonId) {
-        if (buttonId === 'exitGame') {
-            this.sceneSystem.systemHandler.overlayManager?.openExitOverlay?.();
+        const choices = this.home.hidden ? [...this.panel.querySelectorAll('button')] : this.buttons;
+        const current = choices.indexOf(document.activeElement);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const direction = event.key === 'ArrowDown' ? 1 : -1;
+            const next = current < 0 ? (direction > 0 ? 0 : choices.length - 1)
+                : (current + direction + choices.length) % choices.length;
+            choices[next].focus({ preventScroll: true });
+            event.preventDefault();
+        } else if (event.key === 'Enter' && current < 0 && !event.repeat) {
+            choices[0].click();
+            event.preventDefault();
         }
+    }
+
+    destroy() {
+        this.events.abort();
+        this.pending = null;
+        this.room?.dispose();
+        this.room = null;
+        this.root.remove();
     }
 }

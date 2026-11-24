@@ -1,5 +1,6 @@
 import { EngineApp } from 'engine/app/engine_app.js';
 import { SystemHandler } from 'core/system_handler.js';
+import { TitleScene } from 'scene/title/_title_scene.js';
 import { AeroLiveScene } from 'scene/aero_live/_aero_live_scene.js';
 import { TimeHandler } from 'engine/time_handler.js';
 import { MathUtil } from 'util/math_util.js';
@@ -11,7 +12,7 @@ let GameApp;
 
 /**
  * 게임 런타임 진입점입니다.
- * 엔진 시스템을 초기화한 뒤 I Can Fix Her! 주제 선택 화면을 띄웁니다.
+ * 엔진 시스템을 초기화한 뒤 I Can Fix Her! 타이틀 화면을 띄웁니다.
  */
 export async function initializeGameRuntime() {
     try {
@@ -24,8 +25,8 @@ export async function initializeGameRuntime() {
 
         systemHandler = new SystemHandler({
             sceneSystem: {
-                initialSceneState: 'aeroLive',
-                initialSceneFactory: (sceneSystem) => new AeroLiveScene(sceneSystem),
+                initialSceneState: 'title',
+                initialSceneFactory: (sceneSystem) => new TitleScene(sceneSystem),
                 sceneFactories: {
                     aeroLive: (sceneSystem) => new AeroLiveScene(sceneSystem)
                 }
