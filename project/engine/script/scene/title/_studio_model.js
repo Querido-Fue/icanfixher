@@ -1,4 +1,5 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
+import { reflectBayWindow, studioFinishes } from './_studio_finishes.js';
 import { bayWindow, monitorFeed, sign, sleeve, studioPrint } from './_studio_art.js';
 
 const ink = '#193c58', iron = '#527b91', pearl = '#ecfaf7', silver = '#a9cbcf';
@@ -6,7 +7,7 @@ const joinery = '#77989c', birch = '#e4d5af', coral = '#f48686', aqua = '#42d4c8
 const halfPi = Math.PI / 2;
 
 /** Static props share geometry, material and draw calls, including the small desk controls. */
-export function buildStudio(scene) {
+export function buildStudio(scene, gpu = true) {
     const geometries = {
         box: new THREE.BoxGeometry(1, 1, 1),
         drum: new THREE.CylinderGeometry(0.5, 0.5, 1, 28),
@@ -14,12 +15,7 @@ export function buildStudio(scene) {
         ball: new THREE.SphereGeometry(0.5, 16, 12),
         ring: new THREE.TorusGeometry(0.47, 0.036, 8, 36)
     };
-    const matte = new THREE.MeshStandardMaterial({ roughness: 0.84 });
-    const finishes = {
-        matte,
-        enamel: new THREE.MeshStandardMaterial({ roughness: 0.23, metalness: 0.09 }),
-        light: new THREE.MeshBasicMaterial()
-    };
+    const finishes = studioFinishes(gpu);
     const transform = new THREE.Object3D();
     const batches = new Map();
     const up = new THREE.Vector3(0, 1, 0);
@@ -35,6 +31,7 @@ export function buildStudio(scene) {
         batches.get(key).items.push([transform.matrix.clone(), new THREE.Color(color)]);
     }
     const box = (...args) => part('box', ...args);
+    const wood = (x, y, z, w, h, d, color) => part('box', x, y, z, w, h, d, color, [0, 0, 0], 'wood');
     const drum = (...args) => part('drum', ...args);
     const ball = (...args) => part('ball', ...args);
     function rod(start, end, radius, color) {
@@ -74,12 +71,21 @@ export function buildStudio(scene) {
         for (let n = 0; x < 4.07; n++) {
             const width = Math.min(4.08 - x, n === 0 && row % 2 ? 1.1 : 2.13);
             box(x + width / 2, 0.033, z, width - 0.014, 0.055, 0.421,
-                ['#c9b996', '#ded1ac', '#ccbf9e', '#d8c8a4'][(row + n * 3) % 4]);
+                ['#c9b996', '#ded1ac', '#ccbf9e', '#d8c8a4'][(row + n * 3) % 4], [0, 0, 0], 'boards');
             x += width;
         }
     }
     box(0, 2.18, -3.18, 8.28, 4.4, 0.16, '#a4d7d3');
-    box(-4.07, 2.18, 0, 0.16, 4.4, 6.48, '#9bc8dd');
+    // A real opening admits the directional light. Its scenic insert is visible
+    // from indoors but does not cast into the room.
+    function wallSection(bottom, top, back, front) {
+        box(-4.07, (bottom + top) / 2, (back + front) / 2,
+            0.16, top - bottom, front - back, '#9bc8dd');
+    }
+    wallSection(-0.02, 4.38, -3.24, -2.665);
+    wallSection(-0.02, 4.38, -0.375, 3.24);
+    wallSection(-0.02, 1.73, -2.665, -0.375);
+    wallSection(3.73, 4.38, -2.665, -0.375);
     box(0, 4.4, -3.18, 8.35, 0.13, 0.23, pearl);
     box(-4.07, 4.4, 0, 0.23, 0.13, 6.57, pearl);
     box(4.10, 2.17, -3.17, 0.09, 4.42, 0.22, birch);
@@ -87,11 +93,12 @@ export function buildStudio(scene) {
     box(0, 0.17, -3.04, 8.10, 0.23, 0.12, joinery);
     box(-3.93, 0.17, 0, 0.12, 0.23, 6.30, joinery);
     // Inset window, daylight on the bay, painted sash, and slatted valance.
-    box(-3.93, 2.73, -1.52, 0.14, 2.22, 2.48, joinery);
+    for (const z of [-2.71, -0.33]) box(-3.93, 2.73, z, 0.14, 2.22, 0.09, joinery);
+    for (const y of [1.675, 3.785]) box(-3.93, y, -1.52, 0.14, 0.11, 2.29, joinery);
     print(bayWindow, [512, 384], [2.29, 2.0], [-3.845, 2.73, -1.52], halfPi);
     box(-3.80, 2.73, -1.52, 0.09, 2.08, 0.063, pearl);
     box(-3.80, 2.60, -1.52, 0.09, 0.065, 2.34, pearl);
-    box(-3.77, 1.66, -1.52, 0.37, 0.11, 2.62, birch);
+    wood(-3.77, 1.66, -1.52, 0.37, 0.11, 2.62, birch);
     for (let i = 0; i < 3; i++) box(-3.77, 3.86 - i * 0.11, -1.52, 0.17, 0.075, 2.6, pearl);
     // Door with recessed panels and a silver latch.
     box(-3.92, 1.66, 1.54, 0.15, 3.22, 1.58, joinery);
@@ -110,7 +117,7 @@ export function buildStudio(scene) {
     const rug = [-0.12, 1.03];
     for (const [i, ratio] of [1, 0.95, 0.92, 0.86, 0.80, 0.77, 0.70].entries()) {
         drum(rug[0], 0.073 + i * 0.005, rug[1], 4.62 * ratio, 0.018, 2.93 * ratio,
-            ['#327fa4', '#ccf5f8', '#439fbc', '#68c8ce', '#d8faea', '#59b4c2', '#96daca'][i]);
+            ['#327fa4', '#ccf5f8', '#439fbc', '#68c8ce', '#d8faea', '#59b4c2', '#96daca'][i], [0, 0, 0], 'rug');
     }
     for (let i = 0; i < 36; i++) {
         const angle = i * Math.PI / 18;
@@ -121,7 +128,7 @@ export function buildStudio(scene) {
     // Record shelf, displayed sleeve and leaning LP jackets.
     const shelfX = -2.50, shelfZ = -2.44;
     for (const x of [-3.57, -1.43]) box(x, 0.88, shelfZ, 0.11, 1.62, 0.82, joinery);
-    for (const y of [0.23, 0.90, 1.65]) box(shelfX, y, shelfZ, 2.23, 0.10, 0.88, birch);
+    for (const y of [0.23, 0.90, 1.65]) wood(shelfX, y, shelfZ, 2.23, 0.10, 0.88, birch);
     box(shelfX, 0.9, -2.83, 2.12, 1.44, 0.085, '#628c9a');
     for (let i = 0; i < 12; i++) {
         const h = 0.42 + (i * 7 % 5) * 0.045;
@@ -158,7 +165,7 @@ export function buildStudio(scene) {
     }
 
     // Broadcast desk, monitor arm, preview, webcam, mixer and keyboard.
-    box(1.08, 1.32, -2.20, 4.44, 0.16, 1.48, birch);
+    wood(1.08, 1.32, -2.20, 4.44, 0.16, 1.48, birch);
     box(1.08, 1.226, -2.20, 4.35, 0.045, 1.39, joinery);
     for (const x of [-0.88, 3.04]) for (const z of [-2.76, -1.66]) {
         box(x, 0.66, z, 0.12, 1.20, 0.12, ink);
@@ -265,6 +272,7 @@ export function buildStudio(scene) {
         color: '#9beaf0', specular: '#ffffff', shininess: 95,
         transparent: true, opacity: 0.17, depthWrite: false
     }));
+    if (gpu) glass.material.onBeforeCompile = reflectBayWindow;
     glass.position.set(bowlX, bowlY, bowlZ);
     glass.renderOrder = 2;
     scene.add(glass);

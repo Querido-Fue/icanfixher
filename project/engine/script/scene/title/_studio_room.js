@@ -1,5 +1,6 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
 import { TITLE_SCENE_CONSTANTS as SHOTS, TITLE_EYE_HEIGHT } from '../../data/scene/title/title_scene_constants.js';
+import { StudioLens } from './_studio_lens.js';
 import { buildStudio } from './_studio_model.js';
 
 // Exact critically damped spring step. A new destination preserves velocity mid-flight.
@@ -24,32 +25,36 @@ export class StudioRoom {
         this.speed = this.values.map(() => 0);
         this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
         this.isStill = StillRenderer !== null;
+        this.touchScreen = window.matchMedia('(pointer: coarse)');
         this.renderer = this.isStill ? new StillRenderer() :
-            new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
+            new THREE.WebGLRenderer({ alpha: false, antialias: false, powerPreference: 'low-power' });
         try {
             if (!this.isStill) {
-                this.renderer.setClearColor(0, 0);
-                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+                this.renderer.setClearColor('#c4e4df');
+                this.lens = new StudioLens(this.renderer);
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 this.renderer.shadowMap.autoUpdate = false;
                 this.renderer.shadowMap.needsUpdate = true;
             }
-            const sky = new THREE.HemisphereLight('#edfbff', '#a8c5b7', 1.63);
-            const key = new THREE.DirectionalLight('#fff0d8', 2.16);
-            key.position.set(3.6, 8.8, 4.8);
+            const sky = new THREE.HemisphereLight('#d9efff', '#dcc5a6', 1.16);
+            // Grazing sun enters through the cut-out bay window and its real mullions.
+            const key = new THREE.DirectionalLight('#ffdeb0', 2.65);
+            key.position.set(-8.2, 6.65, -3.35);
+            key.target.position.set(0.15, 0.0, 0.37);
             key.castShadow = true;
             Object.assign(key.shadow.camera, { left: -6.3, right: 6.3, top: 6, bottom: -5.6, far: 24 });
             key.shadow.camera.updateProjectionMatrix();
-            key.shadow.mapSize.set(1024, 1024);
+            const shadowSize = this.touchScreen.matches ? 512 : 1024;
+            key.shadow.mapSize.set(shadowSize, shadowSize);
             key.shadow.normalBias = 0.018;
             key.shadow.bias = -0.00035;
-            const rim = new THREE.DirectionalLight('#b0eaff', 0.98);
-            rim.position.set(-4, 4, -2);
-            const lamp = new THREE.PointLight('#f4ffd0', 3.2, 4);
+            const fill = new THREE.DirectionalLight('#e1f5ff', 1.27);
+            fill.position.set(2.1, 4.5, 4.3);
+            const lamp = new THREE.PointLight('#fff0b1', 3.1, 3.1);
             lamp.position.set(2.63, 1.98, -2.36);
-            this.scene.add(sky, key, rim, lamp);
-            buildStudio(this.scene);
+            this.scene.add(sky, key, key.target, fill, lamp);
+            buildStudio(this.scene, !this.isStill);
             this.renderer.domElement.setAttribute('aria-hidden', 'true');
             host.append(this.renderer.domElement);
             this.resize();
@@ -98,7 +103,19 @@ export class StudioRoom {
         const stacked = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
         // Place the point of interest beside the desktop menu or above the mobile controls.
         this.camera.setViewOffset(w, h, stacked ? 0 : -0.125 * w, 0, w, h);
-        this.renderer.setSize(w, h, false);
+        if (this.isStill) {
+            this.renderer.setSize(w, h, false);
+        } else {
+            const compact = this.touchScreen.matches || w <= 720;
+            const maxPixels = compact ? 720000 : 2100000;
+            const ratio = Math.min(window.devicePixelRatio || 1, compact ? 1.4 : 1.75,
+                Math.sqrt(maxPixels / (w * h)), this.renderer.capabilities.maxTextureSize / Math.max(w, h));
+            this.renderer.setDrawingBufferSize(w, h, ratio);
+            if (this.lens && !this.lens.resize(this.renderer)) {
+                this.lens.dispose();
+                this.lens = null;
+            }
+        }
         this.dirty = true;
     }
 
@@ -107,7 +124,12 @@ export class StudioRoom {
         const [x, z, tx, ty, tz] = this.values;
         this.camera.position.set(x, TITLE_EYE_HEIGHT, z);
         this.camera.lookAt(tx, ty, tz);
-        this.renderer.render(this.scene, this.camera);
+        if (this.lens) {
+            const focus = Math.hypot(tx - x, ty - TITLE_EYE_HEIGHT, tz - z);
+            this.lens.render(this.renderer, this.scene, this.camera, focus);
+        } else {
+            this.renderer.render(this.scene, this.camera);
+        }
         this.dirty = false;
     }
 
@@ -120,7 +142,14 @@ export class StudioRoom {
             object.shadow?.dispose();
         });
         for (const geometry of geometries) geometry.dispose();
-        for (const material of materials) { material.map?.dispose(); material.dispose(); }
+        const textures = new Set();
+        for (const material of materials) {
+            if (material.map) textures.add(material.map);
+            if (material.aoMap) textures.add(material.aoMap);
+            material.dispose();
+        }
+        for (const texture of textures) texture.dispose();
+        this.lens?.dispose();
         this.renderer.dispose();
         this.renderer.forceContextLoss?.();
         this.renderer.domElement.remove();
