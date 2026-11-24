@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e33e7f97f7754af40ea459a997f7b868542199d0
+          ref: cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -20,7 +20,18 @@ jobs:
       - name: Open the game and exercise the room controls
         run: |
           set -euo pipefail
-          python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/room-http.log" 2>&1 &
+          export GAME_URL='https://querido-fue.github.io/icanfixher/preview/pr-2/'
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error "${GAME_URL}engine/script/scene/title/_studio_targets.js?build=cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf" -o "$RUNNER_TEMP/targets.js" &&
+              cmp -s project/engine/script/scene/title/_studio_targets.js "$RUNNER_TEMP/targets.js"; then break; fi
+            sleep 5
+          done
+          cmp project/engine/script/scene/title/_studio_targets.js "$RUNNER_TEMP/targets.js"
+          curl -fsSL "${GAME_URL}engine/script/scene/title/_title_scene.js?build=cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf" -o "$RUNNER_TEMP/title.js"
+          cmp project/engine/script/scene/title/_title_scene.js "$RUNNER_TEMP/title.js"
+          curl -fsSL "${GAME_URL}engine/title.css?build=cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf" -o "$RUNNER_TEMP/title.css"
+          cmp project/engine/title.css "$RUNNER_TEMP/title.css"
+          echo "Preview now serving cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf"
           npm install --no-save --prefix "$RUNNER_TEMP/studio-browser" playwright-core@1.56.1
           export QA_CHROME="$(command -v google-chrome)"
           cat > "$RUNNER_TEMP/studio-browser/check.mjs" <<'JS'
@@ -107,12 +118,12 @@ jobs:
               await mobile.setViewportSize({width:844,height:390});
               const start=mobile.getByRole('button',{name:names[2],exact:true});
               await start.waitFor();
-              console.log('ROTATED',await start.evaluate(e=>{
-                  const r=e.getBoundingClientRect(),actual=visualViewport;
-                  const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
-                  return JSON.stringify({button:r.toJSON(),inner:[innerWidth,innerHeight],visual:[actual.width,actual.height,actual.scale],root:document.querySelector('.studio-title').getBoundingClientRect().toJSON(),hit:hit?.className});
-              }));
-              await start.tap({timeout:10000});
+              await mobile.waitForFunction(()=>{
+                  const e=document.querySelector('.studio-hotspot[data-station="desk"]');
+                  const r=e.getBoundingClientRect();
+                  return r.right<=visualViewport.width+1 && r.bottom<=visualViewport.height+1;
+              });
+              await start.tap({timeout:12000});
               await start.locator('span').waitFor({state:'visible'});
               await mobile.close();
               const fallback=await open(true,true);
@@ -122,9 +133,3 @@ jobs:
           } finally {await browser.close()}
           JS
           node "$RUNNER_TEMP/studio-browser/check.mjs"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dark-studio
-          path: '*.jpg'
-          retention-days: 3
