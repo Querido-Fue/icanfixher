@@ -1,4 +1,7 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
+import { AERO_LIVE_SCENE_CONSTANTS } from '../../data/scene/aero_live/aero_live_scene_constants.js';
+
+const colors = AERO_LIVE_SCENE_CONSTANTS.COLORS;
 
 // Small printed props are painted once at load, like decals on a physical model.
 export function studioPrint(width, height, paint) {
@@ -23,76 +26,95 @@ function type(ctx, words, x, y, size, color, family = 'monospace') {
     ctx.fillText(words, x, y);
 }
 
-export function cityWindow(ctx, w, h) {
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, '#495789');
-    sky.addColorStop(0.49, '#bc87ab');
-    sky.addColorStop(0.85, '#f4b590');
-    sky.addColorStop(1, '#f5c49a');
-    rect(ctx, sky, 0, 0, w, h);
-    ctx.fillStyle = '#ffe2ab';
+function disc(ctx, x, y, radius, fill) {
+    ctx.fillStyle = fill;
     ctx.beginPath();
-    ctx.arc(w * 0.73, h * 0.45, h * 0.14, 0, Math.PI * 2);
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
     ctx.fill();
-    for (let i = 0; i < 22; i++) {
-        const x = (i * 103 + 31) % w;
-        const y = (i * 43 + 12) % (h * 0.36);
-        rect(ctx, '#f5dbe0', x, y, i % 4 === 0 ? 3 : 1.5, 1.5);
-    }
-    for (let layer = 0; layer < 2; layer++) {
-        for (let i = 0; i < 24; i++) {
-            const bw = w / 19;
-            const x = (i - 1) * bw + layer * 13;
-            const top = h * (0.81 + layer * 0.12 - 0.22 * Math.abs(Math.sin(i * 17 + layer * 3)));
-            rect(ctx, layer ? '#41465f' : '#776681', x, top, bw - 2, h - top);
-            if (i % 4 === 0) rect(ctx, '#70617c', x + bw / 2, top - 14, 2, 14);
-            for (let n = 0; n < 5; n++) {
-                if ((i + n) % 3) rect(ctx, '#ffd9a5', x + 5 + n % 2 * 9, top + 9 + Math.floor(n / 2) * 12, 4, 3);
-            }
+}
+
+function gradient(ctx, x, y, endX, endY, stops) {
+    const fill = ctx.createLinearGradient(x, y, endX, endY);
+    for (const [offset, color] of stops) fill.addColorStop(offset, color);
+    return fill;
+}
+
+function hill(ctx, width, height, fill, yAt) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    for (let x = 0; x <= width; x += 2) ctx.lineTo(x, yAt(x / width));
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fill();
+}
+
+// Hand-painted scenic insert seen through the miniature's window.
+export function bayWindow(ctx, w, h) {
+    rect(ctx, gradient(ctx, 0, 0, 0, h, [
+        [0, colors.SKY_DEEP], [0.37, colors.SKY_TOP], [0.69, colors.SKY_HAZE], [1, '#eefbd5']
+    ]), 0, 0, w, h);
+    for (const [cx, cy, scale] of [[0.21, 0.26, 1], [0.76, 0.17, 0.67], [0.93, 0.41, 0.35]]) {
+        for (const [dx, dy, r] of [[-44, 6, 16], [-24, 1, 21], [0, -5, 27], [27, 4, 18], [46, 8, 12]]) {
+            disc(ctx, w * cx + dx * scale, h * cy + dy * scale, r * scale, '#f5feff');
         }
     }
+    hill(ctx, w, h, '#5cbbaa', u => h * (0.65 - 0.046 * Math.sin(u * 9 + 0.5)));
+    rect(ctx, gradient(ctx, 0, h * 0.65, 0, h, [
+        [0, '#baf5e8'], [0.20, '#63d5df'], [1, '#158abb']
+    ]), 0, h * 0.68, w, h * 0.32);
+    for (let i = 0; i < 11; i++) {
+        rect(ctx, '#b5f5ed', (i * 83) % w, h * 0.73 + (i * 13) % 62, 11 + i % 4 * 12, 2);
+    }
+    hill(ctx, w, h, gradient(ctx, 0, h * 0.75, 0, h, [
+        [0, '#ceef78'], [0.43, colors.AERO_LIME], [1, '#399e68']
+    ]), u => h * (0.93 - 0.18 * Math.cos(u * 4.2 - 0.25) + 0.032 * u));
 }
 
 export function monitorFeed(ctx, w, h) {
-    rect(ctx, '#102934', 0, 0, w, h);
-    rect(ctx, '#385961', 0, 0, w, 30);
-    type(ctx, 'AQUA  /  STUDIO', 17, 21, 15, '#dcf5e8');
-    rect(ctx, '#294b57', 16, 44, 327, 153);
-    const glow = ctx.createLinearGradient(20, 45, 300, 190);
-    glow.addColorStop(0, '#9edbd0'); glow.addColorStop(1, '#447b97');
-    rect(ctx, glow, 22, 50, 315, 141);
-    // A stylized sine wave doubles as the station mark on the preview monitor.
-    ctx.strokeStyle = '#e2fff1'; ctx.lineWidth = 5; ctx.beginPath();
+    rect(ctx, '#123958', 0, 0, w, h);
+    rect(ctx, gradient(ctx, 0, 0, 0, 32, [[0, '#c3f5ff'], [0.48, '#70ccf1'], [0.53, '#3798ce'], [1, '#2275a5']]), 0, 0, w, 30);
+    type(ctx, 'AQUA  /  STUDIO', 17, 21, 15, '#092c4a');
+    rect(ctx, '#c2eff6', 16, 44, 327, 153);
+    rect(ctx, gradient(ctx, 22, 50, 312, 191, [[0, '#075999'], [0.6, '#13a6c5'], [1, colors.AQUA]]), 22, 50, 315, 141);
+    // Water rings tie the studio's audio visualizer to the game's ocean wallpaper.
+    for (let i = 0; i < 4; i++) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#79d8e8';
+        ctx.beginPath(); ctx.ellipse(176, 137, 42 + i * 28, 9 + i * 7, 0, 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.strokeStyle = '#f5feff'; ctx.lineWidth = 4; ctx.beginPath();
     for (let x = 0; x <= 240; x += 2) {
-        const y = 121 + Math.sin(x * 0.13) * Math.exp(-Math.pow((x - 120) / 51, 2)) * 42;
+        const y = 117 + Math.sin(x * 0.13) * Math.exp(-Math.pow((x - 120) / 53, 2)) * 36;
         if (!x) ctx.moveTo(x + 59, y); else ctx.lineTo(x + 59, y);
     }
     ctx.stroke();
-    type(ctx, 'PREVIEW', 360, 64, 14, '#bce7db');
-    for (let i = 0; i < 7; i++) {
-        rect(ctx, i % 3 ? '#5a8190' : '#f4bd94', 360, 78 + i * 17, 48 + (i * 23) % 70, 5);
-    }
+    type(ctx, 'PREVIEW', 360, 64, 14, colors.SKY_HAZE);
+    for (let i = 0; i < 7; i++) rect(ctx, i % 3 ? '#73b6cf' : colors.AERO_LIME, 360, 78 + i * 17, 48 + (i * 23) % 70, 5);
     for (let i = 0; i < 32; i++) {
         const bar = 6 + 31 * Math.abs(Math.sin(i * 2.7) * Math.cos(i * 0.21));
-        rect(ctx, i > 25 ? '#efba88' : '#88c7b4', 20 + i * 14, h - 13 - bar, 8, bar);
+        rect(ctx, i > 25 ? colors.AERO_LIME : colors.AQUA, 20 + i * 14, h - 13 - bar, 8, bar);
     }
 }
 
 export function sleeve(ctx, w, h) {
-    rect(ctx, '#e6b997', 0, 0, w, h);
-    rect(ctx, '#303d52', 13, 13, w - 26, h - 26);
-    type(ctx, 'AQUA', 28, 66, 46, '#f7d5b0', 'serif');
-    ctx.save(); ctx.beginPath(); ctx.rect(22, 84, w - 44, h - 143); ctx.clip();
-    for (let i = 0; i < 12; i++) {
-        ctx.strokeStyle = ['#f7c7a0','#cf8690','#8caab0'][i % 3]; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(w * 0.44, h * 0.62, 18 + i * 9, 0, 2 * Math.PI); ctx.stroke();
-    }
-    ctx.restore();
-    type(ctx, 'AFTER HOURS', 27, h - 35, 20, '#f4d9b5');
+    rect(ctx, '#eefeff', 0, 0, w, h);
+    rect(ctx, gradient(ctx, 0, 0, w, h, [[0, '#0a5ca4'], [0.58, '#13649d'], [1, '#19a4a6']]), 7, 7, w - 14, h - 14);
+    type(ctx, 'AQUA', 21, 63, 47, '#f7ffff', 'sans-serif');
+    const cd = gradient(ctx, 42, 100, 206, 230, [
+        [0, '#249aca'], [0.16, '#d2fbff'], [0.32, '#b7ef88'], [0.48, '#f5fbff'],
+        [0.65, '#86bbfa'], [0.78, '#cab4f0'], [1, '#4bafa9']
+    ]);
+    disc(ctx, w / 2, h * 0.52, w * 0.36, cd);
+    disc(ctx, w / 2, h * 0.52, w * 0.092, '#ecfbff');
+    disc(ctx, w / 2, h * 0.52, w * 0.051, '#13739f');
+    type(ctx, 'RIPPLE MIX', 22, h - 32, 23, '#e1feff');
 }
 
 export function sign(ctx, w, h) {
-    rect(ctx, '#783d46', 0, 0, w, h);
-    ctx.strokeStyle = '#ffc9ac'; ctx.lineWidth = 4; ctx.strokeRect(7, 7, w - 14, h - 14);
-    type(ctx, 'ON AIR', 28, h * 0.74, 61, '#ffdebb');
+    rect(ctx, gradient(ctx, 0, 0, 0, h, [[0, '#70cde5'], [0.46, '#2986b1'], [0.51, '#105784'], [1, '#123f67']]), 0, 0, w, h);
+    ctx.strokeStyle = '#a9eefc'; ctx.lineWidth = 3; ctx.strokeRect(6, 6, w - 12, h - 12);
+    disc(ctx, 29, h * 0.50, 8, colors.LIVE);
+    disc(ctx, 27, h * 0.46, 2.4, '#ffeaf5');
+    type(ctx, 'ON AIR', 51, h * 0.73, 54, colors.GLASS_WHITE);
 }

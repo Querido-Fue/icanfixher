@@ -31,8 +31,8 @@ export class StudioRoom {
             this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             this.renderer.shadowMap.autoUpdate = false;
             this.renderer.shadowMap.needsUpdate = true;
-            const sky = new THREE.HemisphereLight('#fff2e7', '#b9a1ba', 1.75);
-            const key = new THREE.DirectionalLight('#ffdec2', 2.30);
+            const sky = new THREE.HemisphereLight('#edfbff', '#a8c5b7', 1.63);
+            const key = new THREE.DirectionalLight('#fff0d8', 2.16);
             key.position.set(3.6, 8.8, 4.8);
             key.castShadow = true;
             Object.assign(key.shadow.camera, { left: -6.3, right: 6.3, top: 6, bottom: -5.6, far: 24 });
@@ -40,9 +40,9 @@ export class StudioRoom {
             key.shadow.mapSize.set(1024, 1024);
             key.shadow.normalBias = 0.018;
             key.shadow.bias = -0.00035;
-            const rim = new THREE.DirectionalLight('#a6c4e9', 0.94);
+            const rim = new THREE.DirectionalLight('#b0eaff', 0.98);
             rim.position.set(-4, 4, -2);
-            const lamp = new THREE.PointLight('#ffc385', 5, 4);
+            const lamp = new THREE.PointLight('#f4ffd0', 3.2, 4);
             lamp.position.set(2.63, 1.98, -2.36);
             this.scene.add(sky, key, rim, lamp);
             buildStudio(this.scene);
