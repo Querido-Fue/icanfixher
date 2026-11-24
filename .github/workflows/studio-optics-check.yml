@@ -1,0 +1,133 @@
+name: Check first-person room rendering
+on:
+  push:
+    branches: [studio-first-person-lighting]
+    paths: ['.github/workflows/studio-optics-check.yml']
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check WebGL paths, image output and title navigation
+        run: |
+          set -euo pipefail
+          mkdir -p before
+          git archive 6349ff7dd0676c199313ec6e64b4635476ae0c6e project | tar -x -C before
+          echo '<meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0}section{width:100vw;height:75vh}</style><section></section>' > project/engine/qa-room.html
+          python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/room-http.log" 2>&1 &
+          export QA_CHROME="$(command -v google-chrome)"
+          npm install --no-save --prefix "$RUNNER_TEMP/studio-check" playwright-core@1.56.1
+          cat > "$RUNNER_TEMP/studio-check/check.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs/promises';
+          import { chromium } from 'playwright-core';
+          
+          const browser = await chromium.launch({executablePath: process.env.QA_CHROME, args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          const errors = [];
+          try {
+            for (const [name, width, height, dpr, touch] of [['desktop',1120,720,1,false],['portrait',390,844,3,true],['landscape',844,390,3,true],['legacy',640,420,1,true]]) {
+              const page = await browser.newPage({viewport:{width,height},deviceScaleFactor:dpr,hasTouch:touch,isMobile:touch,reducedMotion:'reduce'});
+              page.on('pageerror', e => errors.push(e.message));
+              page.on('console', m => { if(m.type()==='error' && /shader|THREE\.|WebGLProgram/i.test(m.text())) errors.push(m.text()); });
+              await page.goto('http://127.0.0.1:8765/project/engine/qa-room.html');
+              if(name === 'legacy') await page.evaluate(() => {
+                const original = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function(kind, ...args) {
+                  return kind === 'webgl2' ? null : original.call(this,kind,...args);
+                };
+                const ext = WebGLRenderingContext.prototype.getExtension;
+                WebGLRenderingContext.prototype.getExtension = function(name) {return name.toLowerCase().endsWith('webgl_depth_texture') ? null : ext.call(this,name)};
+              });
+              const stats = await page.evaluate(async () => {
+                const {StudioRoom} = await import('./script/scene/title/_studio_room.js');
+                const room = window.qaRoom = new StudioRoom(document.querySelector('section'));
+                const gl = room.renderer.getContext();
+                const queries = {};
+                for (const id of ['overview','desk','shelf','door']) {
+                  room.frame(id);room.advance(1/60);room.dirty=true;room.render();
+                  const data=new Uint8Array(4*64*64);
+                  gl.readPixels(Math.floor(gl.drawingBufferWidth*0.60)-32,Math.floor(gl.drawingBufferHeight*0.48)-32,64,64,gl.RGBA,gl.UNSIGNED_BYTE,data);
+                  const colors=new Set();
+                  for (let i=0;i<data.length;i+=4) colors.add((data[i]<<16)+(data[i+1]<<8)+data[i+2]);
+                  queries[id]={colors:colors.size,focus:room.lens.material.uniforms.focusDistance.value};
+                }
+                const frame=room.renderer.info.render.frame;room.advance(1/60);room.render();
+                return {width:gl.drawingBufferWidth,height:gl.drawingBufferHeight,depth:!!room.lens.target.depthTexture,webgl2:room.renderer.capabilities.isWebGL2,queries,
+                  idle:room.renderer.info.render.frame===frame,glError:gl.getError(),programs:room.renderer.info.programs.length};
+              });
+              console.log(name,JSON.stringify(stats));
+              assert.equal(stats.idle,true);assert.equal(stats.glError,0);
+              assert.equal(stats.depth,name!=='legacy');assert.equal(stats.webgl2,name!=='legacy');
+              for (const q of Object.values(stats.queries)) assert.ok(q.colors>1);
+              assert.ok(stats.width*stats.height<=(touch ? 720000 : 2100000));
+              if(name==='portrait') {
+                await page.setViewportSize({width:844,height:390});
+                await page.evaluate(()=>{window.qaRoom.resize();window.qaRoom.render()});
+                assert.ok(await page.evaluate(()=>window.qaRoom.lens.target.width===window.qaRoom.renderer.domElement.width));
+              }
+              await page.evaluate(()=>window.qaRoom.dispose());
+              await page.close();
+            }
+            const ui = await browser.newPage({ viewport:{width:1120,height:720},reducedMotion:'reduce' });
+            ui.on('pageerror', e => errors.push(e.message));
+            ui.on('console',m=>{if(m.type()==='error' && /shader|THREE\.|WebGLProgram/i.test(m.text()))errors.push(m.text())});
+            for (const version of ['baseline','candidate']) {
+              const root = version==='candidate' ? '' : '/before';
+              await ui.goto('http://127.0.0.1:8765'+root+'/project/engine/index.html',{waitUntil:'domcontentloaded'});
+              await ui.locator('.studio-view canvas').waitFor({timeout:45000});
+              await ui.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:45000});
+              await ui.screenshot({path:version+'.jpg',type:'jpeg',quality:85});
+              if(version==='candidate') {
+                await ui.getByRole('button',{name:'플레이 가이드',exact:true}).click();
+                await ui.getByRole('heading',{name:'플레이 가이드',exact:true}).waitFor();
+                await ui.getByRole('button',{name:'타이틀로 돌아가기'}).click();
+                await ui.getByRole('button',{name:'게임 종료',exact:true}).click();
+                await ui.getByRole('heading',{name:'방송실을 나갈까요?'}).waitFor();
+                await ui.getByRole('button',{name:'머무르기'}).click();
+                await ui.getByRole('button',{name:'방송 시작',exact:true}).click();
+                await ui.locator('.studio-title').waitFor({state:'detached'});
+              }
+            }
+            await ui.close();
+            const fallback=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true,reducedMotion:'reduce'});
+            await fallback.addInitScript(()=>{
+              const original=HTMLCanvasElement.prototype.getContext;
+              HTMLCanvasElement.prototype.getContext=function(kind,...args){return kind.includes('webgl') ? null : original.call(this,kind,...args)};
+            });
+            await fallback.goto('http://127.0.0.1:8765/project/engine/index.html',{waitUntil:'domcontentloaded'});
+            await fallback.locator('.studio-view canvas').waitFor({timeout:45000});
+            assert.ok(await fallback.locator('.studio-view canvas').evaluate(c=>!!c.getContext('2d')));
+            await fallback.getByRole('button',{name:'플레이 가이드',exact:true}).click();
+            await fallback.getByRole('heading',{name:'플레이 가이드',exact:true}).waitFor();
+            await fallback.close();
+            assert.deepEqual(errors,[]);
+          } finally { await browser.close(); }
+          JS
+          node "$RUNNER_TEMP/studio-check/check.mjs"
+      - name: Compare room frames
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from PIL import Image
+          import io,base64,os
+          for label in ('baseline','candidate'):
+              if not os.path.isfile(label+'.jpg'): continue
+              img=Image.open(label+'.jpg'); img.thumbnail((600,390))
+              out=io.BytesIO(); img.save(out,format='JPEG',quality=67)
+              print('ROOM-'+label+' '+base64.b64encode(out.getvalue()).decode('ascii'))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: room-comparison
+          path: '*.jpg'
+          retention-days: 3
