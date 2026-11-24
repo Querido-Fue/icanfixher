@@ -1,9 +1,12 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
 
 // Each contour and its hit area share a plane on the corresponding model surface.
+export const STUDIO_RECORD = {
+    center: [-2.70, 2.18, -2.38], size: [0.72, 0.72], rotation: [-0.16, 0.50, 0], circular: true
+};
 const surfaces = {
     door: { center: [-3.762, 1.65, 1.54], size: [1.40, 3.08], rotation: [0, Math.PI / 2, 0] },
-    shelf: { center: [-2.72, 1.881, -2.44], size: [0.62, 0.62], rotation: [-Math.PI / 2, 0, 0], circular: true },
+    shelf: STUDIO_RECORD,
     desk: { center: [1.08, 2.21, -2.561], size: [2.32, 1.26], rotation: [0, 0, 0] }
 };
 const margin = 0.22;

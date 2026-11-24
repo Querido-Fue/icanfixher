@@ -63,6 +63,8 @@ export class TitleScene extends BaseScene {
         document.body.append(this.root);
         window.addEventListener('keydown', e => this.onKey(e), { signal: this.events.signal });
         this.host.addEventListener('webglcontextlost', () => this.showStill(), { capture: true, signal: this.events.signal });
+        this.layout = new ResizeObserver(() => this.resize());
+        this.layout.observe(this.host);
         this.roomRequest = 0;
         this.ready = this.loadRoom();
     }
@@ -230,6 +232,7 @@ export class TitleScene extends BaseScene {
 
     destroy() {
         this.events.abort();
+        this.layout.disconnect();
         this.pending = null;
         this.room?.dispose();
         this.room = null;

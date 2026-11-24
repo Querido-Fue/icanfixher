@@ -1,5 +1,6 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
 import { reflectBayWindow, studioFinishes } from './_studio_finishes.js';
+import { STUDIO_RECORD } from './_studio_targets.js';
 import { bayWindow, monitorFeed, sign, sleeve, studioPrint } from './_studio_art.js';
 
 const ink = '#193c58', iron = '#527b91', pearl = '#ecfaf7', silver = '#a9cbcf';
@@ -141,8 +142,15 @@ export function buildStudio(scene, gpu = true) {
     for (let i = 0; i < 3; i++) ball(-2.57 + i * 0.10, 1.22, -2.02, 0.068, 0.068, 0.05, silver);
     // Turntable, vinyl grooves, center label and tonearm.
     box(-2.56, 1.77, shelfZ, 1.32, 0.13, 0.72, ink);
-    for (const [i, r] of [0.62, 0.55, 0.49, 0.18].entries()) {
-        drum(-2.72, 1.847 + i * 0.005, shelfZ, r, 0.018, r, [iron, ink, iron, coral][i]);
+    drum(-2.72, 1.848, shelfZ, 0.70, 0.025, 0.70, iron);
+    // Prop the record above its turntable so its face reads from standing height.
+    const recordCenter = new THREE.Vector3(...STUDIO_RECORD.center);
+    const recordNormal = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(...STUDIO_RECORD.rotation));
+    const recordRotation = new THREE.Quaternion().setFromUnitVectors(up, recordNormal);
+    for (const [i, ratio] of [1, 0.93, 0.77, 0.64, 0.31, 0.063].entries()) {
+        const center = recordCenter.clone().addScaledVector(recordNormal, -0.024 + 0.0035 * i);
+        const diameter = STUDIO_RECORD.size[0] * ratio;
+        drum(...center, diameter, 0.009, diameter, [iron, ink, '#294766', ink, aqua, ink][i], recordRotation);
     }
     rod([-2.08, 1.88, -2.64], [-2.38, 1.91, -2.36], 0.022, pearl);
     box(-2.54, 2.96, -3.035, 1.44, 1.87, 0.085, joinery);
