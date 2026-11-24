@@ -1,0 +1,109 @@
+name: Temporary studio preview for PR 2
+on:
+  push:
+    branches: [preview-room-pr-2]
+permissions: {}
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f575699b0b5c820828cf60cb126d945efd1b169d
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          run-id: 45372972832
+          github-token: ${{ github.token }}
+          path: original
+      - name: Preserve the currently published site and add the preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GITHUB_REPOSITORY/git/ref/heads/main --jq '.object.sha')" = 6349ff7dd0676c199313ec6e64b4635476ae0c6e
+          deployed=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=1" --jq '.[0].sha')
+          test "$deployed" = 6349ff7dd0676c199313ec6e64b4635476ae0c6e
+          mkdir dist
+          tar -xf original/artifact.tar -C dist
+          test -f dist/index.html
+          test ! -e dist/preview/pr-2
+          dest=dist/preview/pr-2
+          mkdir -p "$dest"
+          cp -R project/engine project/asset project/license project/index.html "$dest/"
+          test -z "$(find "$dest" \( -type l -o -iname api_key.txt \) -print -quit)"
+          curl --retry 3 -fsSL "https://querido-fue.github.io/icanfixher/engine/script/scene/title/_studio_room.js?check=6349ff7dd0676c199313ec6e64b4635476ae0c6e" -o "$RUNNER_TEMP/room-live.js"
+          cmp "$RUNNER_TEMP/room-live.js" dist/engine/script/scene/title/_studio_room.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    needs: assemble
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}preview/pr-2/
+    permissions:
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f575699b0b5c820828cf60cb126d945efd1b169d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check public files and open the live game
+        run: |
+          set -euo pipefail
+          base=https://querido-fue.github.io/icanfixher/preview/pr-2
+          for attempt in {1..12}; do
+            if curl -fsSL "$base/engine/script/scene/title/_studio_lens.js?build=f575699b0b5c820828cf60cb126d945efd1b169d" -o "$RUNNER_TEMP/lens.js" &&
+              cmp -s project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"; then break; fi
+            sleep 5
+          done
+          cmp project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"
+          export PREVIEW_URL="$base/" QA_CHROME="$(command -v google-chrome)"
+          npm install --no-save --prefix "$RUNNER_TEMP/preview-qa" playwright-core@1.56.1
+          cat > "$RUNNER_TEMP/preview-qa/check.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import { chromium } from 'playwright-core';
+          const browser = await chromium.launch({executablePath:process.env.QA_CHROME,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          try {
+            for (const mobile of [false,true]) {
+              const page = await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1120,height:720},hasTouch:mobile,isMobile:mobile,deviceScaleFactor:mobile?2:1,reducedMotion:'reduce'});
+              const errors = [];
+              page.on('pageerror', e=>errors.push(e.message));
+              page.on('console', m=>{if(m.type()==='error' && /WebGLProgram|shader error/i.test(m.text()))errors.push(m.text())});
+              const response = await page.goto(process.env.PREVIEW_URL,{waitUntil:'domcontentloaded'});
+              assert.equal(response.status(),200);
+              const canvas=page.locator('.studio-view canvas');
+              await canvas.waitFor({timeout:75000});
+              await page.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:75000});
+              assert.ok(await canvas.evaluate(c=>!!(c.getContext('webgl2')||c.getContext('webgl'))));
+              await page.getByRole('button',{name:'플레이 가이드'}).click();
+              await page.getByRole('heading',{name:'플레이 가이드'}).waitFor();
+              assert.deepEqual(errors,[]);
+              console.log(mobile?'Mobile live preview passed':'Desktop live preview passed',page.url());
+              await page.close();
+            }
+          } finally { await browser.close(); }
+          JS
+          node "$RUNNER_TEMP/preview-qa/check.mjs"
