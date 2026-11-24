@@ -52,22 +52,22 @@ function hill(ctx, width, height, fill, yAt) {
 // Hand-painted scenic insert seen through the miniature's window.
 export function bayWindow(ctx, w, h) {
     rect(ctx, gradient(ctx, 0, 0, 0, h, [
-        [0, colors.SKY_DEEP], [0.37, colors.SKY_TOP], [0.69, colors.SKY_HAZE], [1, '#eefbd5']
+        [0, '#395782'], [0.37, '#80adc9'], [0.69, '#c1e5f0'], [1, '#d9f7f5']
     ]), 0, 0, w, h);
     for (const [cx, cy, scale] of [[0.21, 0.26, 1], [0.76, 0.17, 0.67], [0.93, 0.41, 0.35]]) {
         for (const [dx, dy, r] of [[-44, 6, 16], [-24, 1, 21], [0, -5, 27], [27, 4, 18], [46, 8, 12]]) {
-            disc(ctx, w * cx + dx * scale, h * cy + dy * scale, r * scale, '#f5feff');
+            disc(ctx, w * cx + dx * scale, h * cy + dy * scale, r * scale, '#c9e8f8');
         }
     }
-    hill(ctx, w, h, '#5cbbaa', u => h * (0.65 - 0.046 * Math.sin(u * 9 + 0.5)));
+    hill(ctx, w, h, '#6399ac', u => h * (0.65 - 0.046 * Math.sin(u * 9 + 0.5)));
     rect(ctx, gradient(ctx, 0, h * 0.65, 0, h, [
-        [0, '#baf5e8'], [0.20, '#63d5df'], [1, '#158abb']
+        [0, '#bedde6'], [0.20, '#699fbf'], [1, '#335c82']
     ]), 0, h * 0.68, w, h * 0.32);
     for (let i = 0; i < 11; i++) {
-        rect(ctx, '#b5f5ed', (i * 83) % w, h * 0.73 + (i * 13) % 62, 11 + i % 4 * 12, 2);
+        rect(ctx, '#91bfce', (i * 83) % w, h * 0.73 + (i * 13) % 62, 11 + i % 4 * 12, 2);
     }
     hill(ctx, w, h, gradient(ctx, 0, h * 0.75, 0, h, [
-        [0, '#ceef78'], [0.43, colors.AERO_LIME], [1, '#399e68']
+        [0, '#9bc8cb'], [0.43, '#689ab0'], [1, '#376184']
     ]), u => h * (0.93 - 0.18 * Math.cos(u * 4.2 - 0.25) + 0.032 * u));
 }
 
