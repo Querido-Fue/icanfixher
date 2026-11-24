@@ -78,7 +78,7 @@ jobs:
               await page.close();
             }
             async function capture(page, name) {
-              const bytes = await page.screenshot({path:name+'.jpg',type:'jpeg',quality:85,scale:'css'});
+              const bytes = await page.screenshot({path:name+'.jpg',type:'jpeg',quality:85,scale:'device'});
               const thumbnail = await page.evaluate(async url=>{
                 const img = new Image();img.src=url;await img.decode();
                 const canvas=document.createElement('canvas'),ratio=Math.min(600/img.width,530/img.height,1);
@@ -113,7 +113,18 @@ jobs:
             await mobile.goto('http://127.0.0.1:8765/project/engine/index.html',{waitUntil:'domcontentloaded'});
             await mobile.locator('.studio-view canvas').waitFor({timeout:45000});
             await mobile.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:45000});
-            await capture(mobile,'mobile');await mobile.close();
+            const mobileBounds=await mobile.evaluate(()=>({
+              layout:[innerWidth,innerHeight],visible:[visualViewport.width,visualViewport.height,visualViewport.scale],
+              documentSize:[document.documentElement.clientWidth,document.documentElement.scrollWidth],
+              controls:[...document.querySelectorAll('.studio-title,.studio-view,.studio-view canvas,.studio-copy,.studio-menu button')].map(el=>[el.className||el.tagName,el.getBoundingClientRect().toJSON()])
+            }));
+            console.log('Mobile layout',JSON.stringify(mobileBounds));
+            await capture(mobile,'mobile');
+            const box=await mobile.getByRole('button',{name:'방송 시작'}).boundingBox();
+            assert.ok(box.x>=0 && box.y>=0 && box.x+box.width<=391 && box.y+box.height<=845);
+            await mobile.getByRole('button',{name:'플레이 가이드'}).tap();
+            await mobile.getByRole('heading',{name:'플레이 가이드'}).waitFor();
+            await mobile.close();
             const fallback=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true,reducedMotion:'reduce'});
             await fallback.addInitScript(()=>{
               const original=HTMLCanvasElement.prototype.getContext;

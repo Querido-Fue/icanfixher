@@ -19,7 +19,7 @@ export class StudioRoom {
     constructor(host, StillRenderer = null) {
         this.host = host;
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(59, 1, 0.045, 30);
+        this.camera = new THREE.PerspectiveCamera(63, 1, 0.045, 30);
         this.values = shotValues(SHOTS.overview);
         this.goal = this.values.slice();
         this.speed = this.values.map(() => 0);
@@ -101,11 +101,11 @@ export class StudioRoom {
         const w = Math.max(1, width), h = Math.max(1, height);
         const aspect = w / h;
         // Keep a comfortable horizontal field on the portrait stage without a zoom during motion.
-        const portraitFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(30)) / aspect);
-        this.camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(portraitFov), 59, 78);
+        const portraitFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(31.5)) / aspect);
+        this.camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(portraitFov), 63, 80);
         const stacked = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
         // Place the point of interest beside the desktop menu or above the mobile controls.
-        this.camera.setViewOffset(w, h, stacked ? 0 : -0.125 * w, 0, w, h);
+        this.camera.setViewOffset(w, h, stacked ? 0 : -0.10 * w, 0, w, h);
         if (this.isStill) {
             this.renderer.setSize(w, h, false);
         } else {

@@ -1,11 +1,12 @@
-/* The room and menu share the same stage below the engine's transition layer. */
+/* The full-viewport room has its own lens. Keep it above the game's 16:9
+   vignette (50) and below the scene transition and cursor (80). */
 .studio-title {
     --ink: #103b58;
     --muted: #365e70;
     --accent: #086883;
     position: fixed;
     inset: 0;
-    z-index: 45;
+    z-index: 55;
     isolation: isolate;
     overflow: hidden;
     color: var(--ink);
