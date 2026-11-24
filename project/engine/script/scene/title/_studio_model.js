@@ -51,7 +51,20 @@ export function buildStudio(scene) {
         scene.add(mesh);
     }
 
-    // Lacquered plinth, staggered boards, cutaway walls and picture rails.
+    // Close the former cutaway from the inside. Single-sided panels admit the existing studio lights.
+    function interiorPanel(width, height, position, rotation, color) {
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.92 }));
+        panel.position.set(...position);
+        panel.rotation.set(...rotation);
+        panel.receiveShadow = true;
+        scene.add(panel);
+    }
+    interiorPanel(6.52, 4.47, [4.065, 2.17, 0], [0, -halfPi, 0], '#b7dcd8');
+    interiorPanel(8.29, 4.47, [0, 2.17, 3.18], [0, Math.PI, 0], '#a9d5de');
+    interiorPanel(8.29, 6.52, [0, 4.38, 0], [halfPi, 0, 0], '#edf5ec');
+
+    // Lacquered plinth, staggered boards, walls and picture rails.
     box(0, -0.31, 0, 8.46, 0.50, 6.66, '#245d7a');
     box(0, -0.095, 0, 8.34, 0.10, 6.54, silver);
     box(0, -0.035, 0, 8.26, 0.10, 6.46, joinery);

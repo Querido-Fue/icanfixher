@@ -1,36 +1,40 @@
 import * as THREE from '../../../vendor/three-r160/three.module.min.js';
-import { TITLE_SCENE_CONSTANTS as SHOTS } from '../../data/scene/title/title_scene_constants.js';
+import { TITLE_SCENE_CONSTANTS as SHOTS, TITLE_EYE_HEIGHT } from '../../data/scene/title/title_scene_constants.js';
 import { buildStudio } from './_studio_model.js';
 
 // Exact critically damped spring step. A new destination preserves velocity mid-flight.
 function damp(value, velocity, goal, dt) {
-    const rate = 9.5, decay = Math.exp(-rate * dt);
+    const rate = 6.8, decay = Math.exp(-rate * dt);
     const offset = value - goal;
     const tangent = velocity + rate * offset;
     return [(offset + tangent * dt) * decay + goal, (velocity - tangent * rate * dt) * decay];
 }
 
 function shotValues(shot) {
-    return [...shot.eye, ...shot.look, shot.width, shot.height];
+    return [...shot.floor, ...shot.look];
 }
 
 export class StudioRoom {
-    constructor(host) {
+    constructor(host, StillRenderer = null) {
         this.host = host;
         this.scene = new THREE.Scene();
-        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 70);
+        this.camera = new THREE.PerspectiveCamera(59, 1, 0.045, 30);
         this.values = shotValues(SHOTS.overview);
         this.goal = this.values.slice();
         this.speed = this.values.map(() => 0);
         this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-        this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
+        this.isStill = StillRenderer !== null;
+        this.renderer = this.isStill ? new StillRenderer() :
+            new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
         try {
-            this.renderer.setClearColor(0, 0);
-            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-            this.renderer.shadowMap.enabled = true;
-            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            this.renderer.shadowMap.autoUpdate = false;
-            this.renderer.shadowMap.needsUpdate = true;
+            if (!this.isStill) {
+                this.renderer.setClearColor(0, 0);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.shadowMap.autoUpdate = false;
+                this.renderer.shadowMap.needsUpdate = true;
+            }
             const sky = new THREE.HemisphereLight('#edfbff', '#a8c5b7', 1.63);
             const key = new THREE.DirectionalLight('#fff0d8', 2.16);
             key.position.set(3.6, 8.8, 4.8);
@@ -57,8 +61,11 @@ export class StudioRoom {
     }
 
     frame(id, strength = 1) {
-        const overview = shotValues(SHOTS.overview);
-        this.goal = shotValues(SHOTS[id]).map((target, i) => THREE.MathUtils.lerp(overview[i], target, strength));
+        const origin = shotValues(SHOTS.overview);
+        // On focus, turn towards the object first. Activation completes the walk up to it.
+        this.goal = shotValues(SHOTS[id]).map((value, i) =>
+            THREE.MathUtils.lerp(origin[i], value, i < 2 ? strength * strength : strength)
+        );
     }
 
     advance(seconds) {
@@ -68,7 +75,7 @@ export class StudioRoom {
             const current = this.values[i], goal = this.goal[i];
             if (current === goal && this.speed[i] === 0) continue;
             const [value, speed] = damp(current, this.speed[i], goal, dt);
-            if (this.reducedMotion.matches || (Math.abs(value - goal) < 0.015 && Math.abs(speed) < 0.1)) {
+            if (this.isStill || this.reducedMotion.matches || (Math.abs(value - goal) < 0.015 && Math.abs(speed) < 0.1)) {
                 this.values[i] = goal;
                 this.speed[i] = 0;
             } else {
@@ -83,22 +90,23 @@ export class StudioRoom {
 
     resize() {
         const { width, height } = this.host.getBoundingClientRect();
-        this.aspect = Math.max(1, width) / Math.max(1, height);
-        this.renderer.setSize(Math.max(1, width), Math.max(1, height), false);
+        const w = Math.max(1, width), h = Math.max(1, height);
+        const aspect = w / h;
+        // Keep a comfortable horizontal field on the portrait stage without a zoom during motion.
+        const portraitFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(30)) / aspect);
+        this.camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(portraitFov), 59, 78);
+        const stacked = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        // Place the point of interest beside the desktop menu or above the mobile controls.
+        this.camera.setViewOffset(w, h, stacked ? 0 : -0.125 * w, 0, w, h);
+        this.renderer.setSize(w, h, false);
         this.dirty = true;
     }
 
     render() {
         if (!this.dirty) return;
-        const [x, y, z, tx, ty, tz, width, height] = this.values;
-        const halfHeight = Math.max(height, width / this.aspect) * 0.5;
-        this.camera.position.set(x, y, z);
+        const [x, z, tx, ty, tz] = this.values;
+        this.camera.position.set(x, TITLE_EYE_HEIGHT, z);
         this.camera.lookAt(tx, ty, tz);
-        this.camera.top = halfHeight;
-        this.camera.bottom = -halfHeight;
-        this.camera.right = halfHeight * this.aspect;
-        this.camera.left = -this.camera.right;
-        this.camera.updateProjectionMatrix();
         this.renderer.render(this.scene, this.camera);
         this.dirty = false;
     }
@@ -114,7 +122,7 @@ export class StudioRoom {
         for (const geometry of geometries) geometry.dispose();
         for (const material of materials) { material.map?.dispose(); material.dispose(); }
         this.renderer.dispose();
-        this.renderer.forceContextLoss();
+        this.renderer.forceContextLoss?.();
         this.renderer.domElement.remove();
     }
 }

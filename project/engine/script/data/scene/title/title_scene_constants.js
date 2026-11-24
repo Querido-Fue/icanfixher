@@ -1,7 +1,9 @@
-/** 월드 좌표계의 카메라 위치와 주시점. +Z와 +X 쪽으로 열린 방이다. */
+// Floor positions in the open aisle (x, z). All views use one standing eye height.
+export const TITLE_EYE_HEIGHT = 2.54;
+
 export const TITLE_SCENE_CONSTANTS = Object.freeze({
-    overview: { eye: [10.8, 9.62, 13.8], look: [0, 1.97, 0], width: 12.1, height: 9.25 },
-    desk: { eye: [3.4, 3.0, 4.8], look: [1.0, 1.95, -1.95], width: 5.8, height: 4.25 },
-    shelf: { eye: [2.2, 2.85, 3.8], look: [-2.18, 2.1, -2.18], width: 4.85, height: 3.8 },
-    door: { eye: [3.1, 2.9, 3.8], look: [-3.73, 1.6, 1.55], width: 4.2, height: 3.7 }
+    overview: { floor: [2.90, 2.70], look: [-0.64, 1.99, -1.93] },
+    desk: { floor: [-0.72, -0.06], look: [1.06, 2.13, -2.53] },
+    shelf: { floor: [-1.91, -0.30], look: [-2.53, 2.15, -2.51] },
+    door: { floor: [-1.58, 1.84], look: [-3.76, 1.82, 1.53] }
 });

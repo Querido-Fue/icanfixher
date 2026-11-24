@@ -58,26 +58,31 @@ export class TitleScene extends BaseScene {
         document.body.append(this.root);
         window.addEventListener('keydown', e => this.onKey(e), { signal: this.events.signal });
         this.host.addEventListener('webglcontextlost', () => this.showStill(), { capture: true, signal: this.events.signal });
+        this.roomRequest = 0;
         this.ready = this.loadRoom();
     }
 
-    async loadRoom() {
+    async loadRoom(still = false) {
+        const request = ++this.roomRequest;
         try {
             const { StudioRoom } = await import('./_studio_room.js');
-            if (this.events.signal.aborted) return;
-            this.room = new StudioRoom(this.host);
-            this.host.classList.add('is-rendered');
+            const StillRenderer = still ? (await import('./_studio_still.js')).StudioStillRenderer : null;
+            if (this.events.signal.aborted || request !== this.roomRequest) return;
+            this.room = new StudioRoom(this.host, StillRenderer);
+            const shot = this.root.dataset.shot;
+            if (shot) this.room.frame(shot, this.home.hidden || this.pending ? 1 : 0.55);
         } catch (error) {
-            console.warn('[TitleScene] 정적 방송실 배경을 사용합니다.', error);
-            this.showStill();
+            if (this.events.signal.aborted || request !== this.roomRequest) return;
+            if (!still) return this.showStill();
+            console.warn('[TitleScene] 방송실 배경을 그릴 수 없습니다.', error);
         }
     }
 
     showStill() {
         const room = this.room;
         this.room = null;
-        this.host.classList.remove('is-rendered');
         room?.dispose();
+        return this.loadRoom(true);
     }
 
     whenReadyForTransition() { return this.ready; }
