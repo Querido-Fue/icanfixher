@@ -3,6 +3,9 @@ import { AERO_LIVE_SCENE_CONSTANTS } from '../../project/engine/script/data/scen
 export const AERO_LIVE_PROXY_VERSION = 'aero-live-proxy-v1';
 export const AERO_LIVE_PROXY_PATH = '/v1/aero-live';
 export const AERO_LIVE_PROXY_ORIGIN = 'https://querido-fue.github.io';
+export const GAME_ORIGIN = 'https://jukchang.com';
+export const GAME_BASE_PATH = '/icanfixher';
+export const isGameOrigin = origin => origin === GAME_ORIGIN || origin === AERO_LIVE_PROXY_ORIGIN;
 export const GEMINI_GENERATE_CONTENT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export const REQUEST_LIMITS = Object.freeze({

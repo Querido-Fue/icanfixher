@@ -1,6 +1,8 @@
 import { AeroLiveLlmContract } from '../../project/engine/script/scene/aero_live/_aero_live_llm_contract.mjs';
 import {
-    AERO_LIVE_PROXY_ORIGIN,
+    GAME_ORIGIN,
+    GAME_BASE_PATH,
+    isGameOrigin,
     AERO_LIVE_PROXY_PATH,
     AERO_LIVE_PROXY_VERSION,
     GEMINI_GENERATE_CONTENT_BASE_URL,
@@ -60,11 +62,11 @@ class ProxyError extends Error {
 }
 
 function corsHeaders(origin) {
-    if (origin !== AERO_LIVE_PROXY_ORIGIN) {
+    if (!isGameOrigin(origin)) {
         return {};
     }
     return {
-        'Access-Control-Allow-Origin': AERO_LIVE_PROXY_ORIGIN,
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Game-Session',
         'Access-Control-Max-Age': '600',
@@ -347,7 +349,7 @@ function validateModelText(contract, lane, responseText, context) {
 
 async function handleProxyRequest(request, env, origin, fetchImpl, timeoutMs) {
     if (request.method === 'OPTIONS') {
-        if (origin !== AERO_LIVE_PROXY_ORIGIN) {
+        if (!isGameOrigin(origin)) {
             return applyInvalidRateLimit(env, request, origin, null, 'INVALID_ORIGIN');
         }
         const requestedMethod = request.headers.get('Access-Control-Request-Method');
@@ -362,7 +364,7 @@ async function handleProxyRequest(request, env, origin, fetchImpl, timeoutMs) {
     if (request.method !== 'POST') {
         return applyInvalidRateLimit(env, request, origin, null, 'INVALID_METHOD');
     }
-    if (origin !== AERO_LIVE_PROXY_ORIGIN) {
+    if (!isGameOrigin(origin)) {
         return applyInvalidRateLimit(env, request, origin, null, 'INVALID_ORIGIN');
     }
     if (!isJsonContentType(request.headers.get('content-type'))) {
@@ -427,6 +429,17 @@ export function createAeroLiveWorker(options = {}) {
         async fetch(request, env) {
             const url = new URL(request.url);
             const origin = request.headers.get('origin');
+            if (url.origin === GAME_ORIGIN) {
+                if (request.method !== 'GET' && request.method !== 'HEAD') {
+                    return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+                }
+                if (url.pathname === GAME_BASE_PATH) {
+                    url.pathname += '/';
+                    return Response.redirect(url.href, 308);
+                }
+                if (url.pathname.startsWith(GAME_BASE_PATH + '/')) return env.GAME_ASSETS.fetch(request);
+                return new Response(null, { status: 404 });
+            }
             if (url.pathname === '/health' && request.method === 'GET') {
                 return jsonResponse({
                     ok: true,

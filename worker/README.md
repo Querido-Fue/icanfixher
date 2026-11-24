@@ -1,6 +1,6 @@
 # I Can Fix Her! Gemini Worker
 
-`nhn-aero-live-api` is the only component that calls Gemini. The GitHub Pages game sends a small, validated game context to `POST /v1/aero-live`; this Worker builds the Gemini request and returns only contract-validated JSON.
+`nhn-aero-live-api` is the only component that calls Gemini. The browser game sends a small, validated game context to `POST /v1/aero-live`; this Worker builds the Gemini request and returns only contract-validated JSON.
 
 ## Local setup
 
@@ -15,7 +15,7 @@ npm test
 For a local Worker session, create `worker/.dev.vars` from `.dev.vars.example`, fill in only your own local test secret, and keep that file untracked. Then run:
 
 ```sh
-npx wrangler dev
+npm run dev
 ```
 
 The example file intentionally contains a placeholder only. Never place a real Gemini key in this repository, a commit, GitHub Actions, or a Pages artifact.
@@ -26,7 +26,7 @@ The example file intentionally contains a placeholder only. Never place a real G
 
 ```sh
 npx wrangler secret put GEMINI_API_KEY
-npx wrangler deploy
+npm run deploy
 ```
 
 No key value belongs in a command, source file, or `wrangler.jsonc`.
@@ -37,9 +37,11 @@ The production route is the Custom Domain `api.jukchang.com` (`custom_domain: tr
 https://api.jukchang.com/v1/aero-live
 ```
 
-The only allowed browser Origin is exactly `https://querido-fue.github.io`. There is no wildcard Origin and no credentialed CORS mode.
+The allowed browser origins are `https://jukchang.com` and `https://querido-fue.github.io`. There is no wildcard Origin and no credentialed CORS mode.
 
 The browser endpoint and proxy version are configured in `project/engine/script/data/scene/aero_live/aero_live_scene_constants.js`. In a healthy Pages deployment, the browser Network tab shows `https://api.jukchang.com/v1/aero-live` only; a Gemini API URL in the browser means the deployment is incorrect. Chat failures use the game's existing local fallback path, while intent failures remain non-actionable technical failures.
+
+The production game is served at `https://jukchang.com/icanfixher/`. Wrangler publishes the files staged by `npm run stage:game` and routes only the game prefix on the apex hostname. The existing apex DNS record must be proxied by Cloudflare. GitHub Actions deploys from `main` using the repository secret `CLOUDFLARE_API_TOKEN` and the account ID in `CLOUDFLARE_ACCOUNT_ID` (secret or variable). The Worker keeps its existing server-side Gemini secret.
 
 ## Request context contract
 

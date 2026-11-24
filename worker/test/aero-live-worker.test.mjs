@@ -166,22 +166,41 @@ test('health endpoint returns its fixed public contract', async () => {
     });
 });
 
-test('only the game origin receives a valid CORS preflight', async () => {
-    const worker = createAeroLiveWorker({ fetchImpl: async () => assert.fail('not called') });
-    const request = new Request(API_URL, {
-        method: 'OPTIONS',
-        headers: {
-            Origin: AERO_LIVE_PROXY_ORIGIN,
-            'Access-Control-Request-Method': 'POST'
-        }
-    });
-    const response = await worker.fetch(request, createEnv());
+for (const origin of [AERO_LIVE_PROXY_ORIGIN, 'https://jukchang.com']) {
+    test('allows game preflight from ' + origin, async () => {
+        const worker = createAeroLiveWorker({ fetchImpl: async () => assert.fail('not called') });
+        const request = new Request(API_URL, {
+            method: 'OPTIONS',
+            headers: {
+                Origin: origin,
+                'Access-Control-Request-Method': 'POST'
+            }
+        });
+        const response = await worker.fetch(request, createEnv());
 
-    assert.equal(response.status, 204);
-    assert.equal(response.headers.get('Access-Control-Allow-Origin'), AERO_LIVE_PROXY_ORIGIN);
-    assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
-    assert.equal(response.headers.get('Access-Control-Allow-Headers'), 'Content-Type, X-Game-Session');
-    assert.equal(response.headers.get('Access-Control-Allow-Credentials'), null);
+        assert.equal(response.status, 204);
+        assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+        assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
+        assert.equal(response.headers.get('Access-Control-Allow-Headers'), 'Content-Type, X-Game-Session');
+        assert.equal(response.headers.get('Access-Control-Allow-Credentials'), null);
+    });
+}
+
+test('serves the game path on jukchang.com and keeps its API and homepage separate', async () => {
+    const worker = createAeroLiveWorker();
+    const assetPaths = [];
+    const env = { GAME_ASSETS: { fetch(request) {
+        assetPaths.push(new URL(request.url).pathname);
+        return new Response('studio');
+    } } };
+    const get = path => worker.fetch(new Request('https://jukchang.com' + path), env);
+    assert.equal((await get('/icanfixher?from=home')).headers.get('Location'), 'https://jukchang.com/icanfixher/?from=home');
+    assert.equal(await (await get('/icanfixher/')).text(), 'studio');
+    assert.equal((await get('/icanfixher/engine/title.css')).status, 200);
+    assert.equal((await get('/')).status, 404);
+    assert.equal((await get('/icanfixher-other/')).status, 404);
+    assert.equal((await get('/v1/aero-live')).status, 404);
+    assert.deepEqual(assetPaths, ['/icanfixher/', '/icanfixher/engine/title.css']);
 });
 
 test('rejects an unapproved origin without reflecting it', async () => {

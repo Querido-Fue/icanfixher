@@ -46,3 +46,47 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-game-domain:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test Worker
+        working-directory: worker
+        run: |
+          npm ci
+          node --test test/*.test.mjs
+      - name: Publish game and API on Cloudflare
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo '::error::Configure the CLOUDFLARE_API_TOKEN repository secret for the jukchang.com zone.'
+            exit 1
+          fi
+          npm run deploy
+      - name: Verify the public game and API
+        shell: bash
+        run: |
+          base=https://jukchang.com/icanfixher
+          for attempt in {1..12}; do
+            if curl -fsS --max-time 15 "$base/?build=$GITHUB_SHA" -o "$RUNNER_TEMP/game.html" &&
+               cmp -s project/index.html "$RUNNER_TEMP/game.html" &&
+               curl -fsS --max-time 15 "$base/engine/script/scene/title/_studio_room.js?build=$GITHUB_SHA" -o "$RUNNER_TEMP/camera.js" &&
+               cmp -s project/engine/script/scene/title/_studio_room.js "$RUNNER_TEMP/camera.js" &&
+               curl -fsS --max-time 15 -X OPTIONS -H 'Origin: https://jukchang.com' -H 'Access-Control-Request-Method: POST' -D "$RUNNER_TEMP/game-cors" -o /dev/null https://api.jukchang.com/v1/aero-live &&
+               grep -Eiq '^access-control-allow-origin: https://jukchang\.com[[:space:]]*$' "$RUNNER_TEMP/game-cors"; then
+              echo 'Verified https://jukchang.com/icanfixher/'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
