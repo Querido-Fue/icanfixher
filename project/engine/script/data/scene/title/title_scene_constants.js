@@ -1,15 +1,9 @@
-/**
- * 타이틀 화면에서 사용하는 정적 레이아웃 데이터입니다.
- */
+// Floor positions in the open aisle (x, z). All views use one standing eye height.
+export const TITLE_EYE_HEIGHT = 2.54;
+
 export const TITLE_SCENE_CONSTANTS = Object.freeze({
-    TITLE_IMAGE_PATH: '../asset/image/title.png',
-    BUTTONS: Object.freeze([
-        Object.freeze({
-            id: 'exitGame',
-            x: 70.1,
-            y: 76.3,
-            width: 18.2,
-            height: 18.7
-        })
-    ])
+    overview: { floor: [2.90, 2.70], look: [-0.64, 1.99, -1.93] },
+    desk: { floor: [-0.72, -0.06], look: [1.06, 2.13, -2.53] },
+    shelf: { floor: [-1.91, -0.30], look: [-2.53, 2.15, -2.51] },
+    door: { floor: [-1.58, 1.84], look: [-3.76, 1.82, 1.53] }
 });

@@ -15,10 +15,20 @@
     {
       "pattern": "api.jukchang.com",
       "custom_domain": true
+    },
+    {
+      "pattern": "jukchang.com/icanfixher",
+      "zone_name": "jukchang.com"
+    },
+    {
+      "pattern": "jukchang.com/icanfixher/*",
+      "zone_name": "jukchang.com"
     }
   ],
   "secrets": {
-    "required": ["GEMINI_API_KEY"]
+    "required": [
+      "GEMINI_API_KEY"
+    ]
   },
   "ratelimits": [
     {
@@ -45,5 +55,10 @@
         "period": 60
       }
     }
-  ]
+  ],
+  "assets": {
+    "directory": "./.wrangler/game-assets",
+    "binding": "GAME_ASSETS",
+    "run_worker_first": true
+  }
 }
