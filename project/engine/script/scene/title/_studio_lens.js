@@ -86,6 +86,14 @@ export class StudioLens {
         renderer.setRenderTarget(this.target);
         const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
         renderer.setRenderTarget(null);
+        if (!complete && this.target.depthTexture && !gl.isContextLost()) {
+            this.target.dispose();
+            this.target.depthTexture = null;
+            this.material.uniforms.roomDepth.value = null;
+            delete this.material.defines.USE_FOCUS_DEPTH;
+            this.material.needsUpdate = true;
+            return this.resize(renderer);
+        }
         return complete;
     }
 

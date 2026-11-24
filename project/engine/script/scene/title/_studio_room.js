@@ -30,6 +30,9 @@ export class StudioRoom {
             new THREE.WebGLRenderer({ alpha: false, antialias: false, powerPreference: 'low-power' });
         try {
             if (!this.isStill) {
+                if (!this.renderer.capabilities.isWebGL2 && !this.renderer.extensions.has('ANGLE_instanced_arrays')) {
+                    throw new Error('The studio needs instanced drawing');
+                }
                 this.renderer.setClearColor('#c4e4df');
                 this.lens = new StudioLens(this.renderer);
                 this.renderer.shadowMap.enabled = true;
