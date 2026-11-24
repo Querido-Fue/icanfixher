@@ -24,14 +24,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check out the reviewed room snapshot
-        if: github.event_name == 'push' && github.event.before == '431f7b48c1bd8338665ea1783984fe163e81faba' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')
-        uses: actions/checkout@v4
-        with:
-          ref: cbb6998ecf4dc3ad40a0a2a31310305fc8a3f5cf
-          path: room-preview-source
-          persist-credentials: false
-
       - name: Prepare static site
         run: |
           mkdir -p dist
@@ -43,18 +35,6 @@ jobs:
             exit 1
           fi
 
-      - name: Add the temporary preview under its own URL
-        if: github.event_name == 'push' && github.event.before == '431f7b48c1bd8338665ea1783984fe163e81faba' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')
-        run: |
-          set -euo pipefail
-          dest=dist/preview/pr-2
-          test ! -e "$dest"
-          mkdir -p "$dest"
-          cp -R room-preview-source/project/{index.html,engine,asset,license} "$dest/"
-          test -z "$(find "$dest" \( -type l -o -iname api_key.txt \) -print -quit)"
-          curl --retry 3 -fsSL 'https://querido-fue.github.io/icanfixher/engine/script/scene/title/_studio_room.js' -o "$RUNNER_TEMP/original-room.js"
-          cmp dist/engine/script/scene/title/_studio_room.js "$RUNNER_TEMP/original-room.js"
-
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
@@ -62,20 +42,12 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-          name: github-pages-${{ github.run_attempt }}
-
-      # Pages can lag behind the artifact upload response on a fresh run.
-      - name: Wait for artifact indexing
-        run: sleep 10
 
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          artifact_name: github-pages-${{ github.run_attempt }}
 
   deploy-game-domain:
-    if: ${{ !(github.event_name == 'push' && github.event.before == '431f7b48c1bd8338665ea1783984fe163e81faba' && startsWith(github.event.head_commit.message, 'Publish PR 2 room preview on Pages')) }}
     needs: deploy
     runs-on: ubuntu-latest
     permissions:
