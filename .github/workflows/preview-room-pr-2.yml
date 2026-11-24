@@ -1,66 +1,125 @@
-name: Verify published studio entry points
+name: Check the studio's object controls
 on:
   push:
     branches: [preview-room-pr-2]
     paths: ['.github/workflows/preview-room-pr-2.yml']
-permissions: {}
+permissions:
+  contents: read
 jobs:
-  verify:
+  browser:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f575699b0b5c820828cf60cb126d945efd1b169d
+          ref: 924b596fc94268e56b6e6274a32fa0dbccca752c
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check public files and open the live game
+      - name: Open the game and exercise the room controls
         run: |
           set -euo pipefail
-          base=https://querido-fue.github.io/icanfixher/preview/pr-2
-          for attempt in {1..12}; do
-            if curl -fsSL "$base/engine/script/scene/title/_studio_lens.js?build=f575699b0b5c820828cf60cb126d945efd1b169d" -o "$RUNNER_TEMP/lens.js" &&
-              cmp -s project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"; then break; fi
-            sleep 5
-          done
-          cmp project/engine/script/scene/title/_studio_lens.js "$RUNNER_TEMP/lens.js"
-          export PREVIEW_URL="$base/" QA_CHROME="$(command -v google-chrome)"
-          npm install --no-save --prefix "$RUNNER_TEMP/preview-qa" playwright-core@1.56.1
-          cat > "$RUNNER_TEMP/preview-qa/check.mjs" <<'JS'
+          python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/room-http.log" 2>&1 &
+          npm install --no-save --prefix "$RUNNER_TEMP/studio-browser" playwright-core@1.56.1
+          export QA_CHROME="$(command -v google-chrome)"
+          cat > "$RUNNER_TEMP/studio-browser/check.mjs" <<'JS'
           import assert from 'node:assert/strict';
-          import {chromium} from 'playwright-core';
+          import { chromium } from 'playwright-core';
           const browser=await chromium.launch({executablePath:process.env.QA_CHROME,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
-          async function visit(entry,mobile) {
-            const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1120,height:720},hasTouch:mobile,isMobile:mobile,deviceScaleFactor:mobile?2:1,reducedMotion:'reduce'});
-            const problems=[];
-            page.on('pageerror',e=>problems.push('JS '+e.message));
-            page.on('console',m=>{if(['error','warning'].includes(m.type()))problems.push(m.type()+' '+m.text().slice(0,360))});
-            page.on('requestfailed',r=>problems.push(r.failure()?.errorText+' '+new URL(r.url()).pathname));
-            page.on('response',r=>{if(r.status()>=400)problems.push(r.status()+' '+new URL(r.url()).pathname)});
-            const url=new URL(entry,process.env.PREVIEW_URL).href;
-            try {
-              await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+          const game=process.env.GAME_URL||'http://127.0.0.1:8765/project/';
+          const names=['게임 종료','플레이 가이드','방송 시작'];
+          const errors=[];
+          async function open(mobile, fallback=false) {
+              const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1440,height:900},hasTouch:mobile,isMobile:mobile,deviceScaleFactor:mobile?2:1,reducedMotion:'reduce'});
+              page.on('pageerror',e=>errors.push(e.message));
+              page.on('console',m=>{if(m.type()==='error' && /WebGLProgram|shader error/i.test(m.text()))errors.push(m.text())});
+              if(fallback) await page.addInitScript(()=>{
+                  const method=HTMLCanvasElement.prototype.getContext;
+                  HTMLCanvasElement.prototype.getContext=function(name,...args) {return name.includes('webgl')?null:method.call(this,name,...args)};
+              });
+              const response=await page.goto(game,{waitUntil:'domcontentloaded'});
+              assert.equal(response.status(),200);
+              await page.locator('.studio-view canvas').waitFor({timeout:45000});
+              await page.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:45000});
+              assert.equal(await page.locator('.studio-title h1,.studio-menu').count(),0);
+              for(const name of names) {
+                  const button=page.getByRole('button',{name,exact:true});
+                  const hit=await button.boundingBox();
+                  assert.ok(hit&&hit.width>=44&&hit.height>=44&&hit.x>=0&&hit.y>=0,name+' missing or offscreen');
+                  const legal=await button.evaluate(el=>{
+                      const b=el.getBoundingClientRect();
+                      return b.right<=visualViewport.width+1&&b.bottom<=visualViewport.height+1;
+                  });
+                  assert.ok(legal,name+' extends offscreen');
+                  assert.equal(await button.locator('span').isVisible(),false);
+              }
               const canvas=page.locator('.studio-view canvas');
-              await canvas.waitFor({timeout:35000});
-              await page.locator('#loading-screen:visible').waitFor({state:'hidden',timeout:35000});
-              assert.ok(await canvas.evaluate(c=>!!(c.getContext('webgl2')||c.getContext('webgl'))));
-              await page.getByRole('button',{name:'플레이 가이드'}).click();
-              await page.getByRole('heading',{name:'플레이 가이드'}).waitFor();
-              console.log('PUBLIC_OK',url,mobile?'mobile':'desktop');return true;
-            } catch(e) {
-              console.log('PUBLIC_FAIL',url,mobile?'mobile':'desktop',e.message.split('\n')[0],await page.locator('body').innerText().catch(()=>''));
-              console.log('EVENTS',JSON.stringify(problems.slice(0,40)));
-              return false;
-            } finally {await page.close()}
+              assert.equal(await canvas.evaluate(c=>!!(c.getContext('webgl2')||c.getContext('webgl'))),!fallback);
+              return page;
+          }
+          async function screenshot(page,name) {
+              const bytes=await page.screenshot({path:name+'.jpg',type:'jpeg',quality:82});
+              const miniature=await page.evaluate(async data=>{
+                  const img=new Image();img.src=data;await img.decode();
+                  const canvas=document.createElement('canvas'), ratio=Math.min(720/img.width,570/img.height);
+                  canvas.width=Math.round(img.width*ratio);canvas.height=Math.round(img.height*ratio);
+                  canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+                  return canvas.toDataURL('image/jpeg',0.70).split(',')[1];
+              },'data:image/jpeg;base64,'+bytes.toString('base64'));
+              console.log('STUDIO-'+name+' '+miniature);
           }
           try {
-            const urls=['./','engine/index.html'];
-            const desktop=await Promise.all(urls.map(url=>visit(url,false)));
-            assert.ok(desktop.some(Boolean),'No live entry opened');
-            assert.ok(await visit(urls[desktop.indexOf(true)],true),'Mobile entry did not open');
+              const desktop=await open(false);
+              if (!process.env.GAME_URL) await screenshot(desktop,'desktop');
+              const hover=desktop.getByRole('button',{name:names[2],exact:true});
+              await hover.hover();
+              await hover.locator('span').waitFor({state:'visible'});
+              if (!process.env.GAME_URL) await screenshot(desktop,'hover');
+              await desktop.mouse.move(12,12);
+              await hover.locator('span').waitFor({state:'hidden'});
+              await desktop.keyboard.press('Tab');
+              const door=desktop.getByRole('button',{name:names[0],exact:true});
+              assert.ok(await door.evaluate(el=>el===document.activeElement));
+              await door.locator('span').waitFor({state:'visible'});
+              await desktop.keyboard.press('Enter');
+              await desktop.getByRole('heading',{name:'방송실을 나갈까요?'}).waitFor();
+              await desktop.keyboard.press('Escape');
+              await door.waitFor();
+              assert.ok(await door.evaluate(el=>el===document.activeElement));
+              await desktop.keyboard.press('ArrowRight');
+              await desktop.keyboard.press('Enter');
+              await desktop.getByRole('heading',{name:names[1]}).waitFor();
+              await desktop.getByRole('button',{name:'방으로 돌아가기'}).click();
+              await hover.click();
+              await desktop.locator('.studio-title').waitFor({state:'detached',timeout:20000});
+              await desktop.close();
+              const mobile=await open(true);
+              if (!process.env.GAME_URL) await screenshot(mobile,'mobile');
+              const record=mobile.getByRole('button',{name:names[1],exact:true});
+              await record.tap();
+              await record.locator('span').waitFor({state:'visible'});
+              assert.equal(await mobile.locator('.studio-detail').isVisible(),false);
+              if (!process.env.GAME_URL) await screenshot(mobile,'touch');
+              await record.tap();
+              await mobile.getByRole('heading',{name:names[1]}).waitFor();
+              await mobile.getByRole('button',{name:'방으로 돌아가기'}).tap();
+              await mobile.setViewportSize({width:844,height:390});
+              const start=mobile.getByRole('button',{name:names[2],exact:true});
+              await start.waitFor();
+              await start.tap();
+              await start.locator('span').waitFor({state:'visible'});
+              await mobile.close();
+              const fallback=await open(true,true);
+              await fallback.close();
+              assert.deepEqual(errors,[]);
+              console.log('Verified glow shader, hover, keyboard, touch, rotation and software fallback',game);
           } finally {await browser.close()}
           JS
-          node "$RUNNER_TEMP/preview-qa/check.mjs"
+          node "$RUNNER_TEMP/studio-browser/check.mjs"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dark-studio
+          path: '*.jpg'
+          retention-days: 3
