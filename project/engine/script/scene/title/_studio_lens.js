@@ -59,10 +59,11 @@ export class StudioLens {
                               + max(c - 0.64, 0.0) + max(d - 0.64, 0.0);
                     color += glow * 0.045;
                     float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
-                    color *= mix(vec3(0.94, 1.01, 1.045), vec3(1.045, 1.014, 0.965),
-                                 smoothstep(0.08, 0.77, lightness));
+                    color *= mix(vec3(0.52, 0.63, 0.91), vec3(0.83, 0.95, 1.04),
+                                 smoothstep(0.035, 0.60, lightness));
+                    color += vec3(0.002, 0.004, 0.011);
                     vec2 edge = 2.0 * screenUV - 1.0;
-                    color *= 1.0 - 0.115 * smoothstep(0.32, 1.83, dot(edge, edge));
+                    color *= 1.0 - 0.31 * smoothstep(0.32, 1.83, dot(edge, edge));
                     gl_FragColor = vec4(color, 1.0);
                     #include <colorspace_fragment>
                 }`

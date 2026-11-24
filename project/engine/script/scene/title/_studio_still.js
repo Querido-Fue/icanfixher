@@ -2,7 +2,7 @@ import * as THREE from '../../../vendor/three-r160/three.module.min.js';
 
 // Render a still on selection or resize when the browser has no WebGL context.
 // The same camera, meshes and printed textures are used for both renderers.
-const light = new THREE.Vector3(3.6, 8.8, 4.8).normalize();
+const light = new THREE.Vector3(-8.35, 6.65, -3.72).normalize();
 const toByte = new Uint8ClampedArray(1025);
 for (let i = 0; i < toByte.length; i++) {
     const linear = i / 1024;
@@ -33,7 +33,7 @@ function prepareMeshes(scene) {
                 const point = new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(world);
                 const face = new THREE.Vector3().fromBufferAttribute(normal, i).applyNormalMatrix(normals);
                 const shade = material.isMeshBasicMaterial ? 1 :
-                    0.47 + 0.16 * (1 + face.y) + 0.59 * Math.max(0, face.dot(light));
+                    0.16 + 0.06 * (1 + face.y) + 0.46 * Math.max(0, face.dot(light));
                 return { point, shade, u: uv.getX(i), v: uv.getY(i) };
             });
             meshes.push({ vertices, indices: geometry.index.array, color, material, texture, order: object.renderOrder });
@@ -100,6 +100,8 @@ function triangle(a, b, c, mesh, image, depth) {
                 green = toByte[Math.min(1024, Math.round(color.g * brightness))];
                 blue = toByte[Math.min(1024, Math.round(color.b * brightness))];
             }
+            red *= 0.74;
+            green *= 0.84;
             const offset = 4 * index, alpha = material.opacity;
             data[offset] = red * alpha + data[offset] * (1 - alpha);
             data[offset + 1] = green * alpha + data[offset + 1] * (1 - alpha);
